@@ -37,7 +37,7 @@ class VectorQuantizer(layers.Layer):
             {
                 "embedding_dim": self.embedding_dim,
                 "num_embeddings": self.num_embeddings,
-                "beta": self.beta
+                "beta": self.beta,
             }
         )
         return config
@@ -88,6 +88,8 @@ def get_encoder(latent_dim=16):
         encoder_inputs
     )
     x = layers.Conv2D(64, 3, activation="relu", strides=2, padding="same")(x)
+    x = layers.Conv2D(64, 3, activation="relu", strides=1, padding="same")(x)
+    x = layers.Conv2D(64, 3, activation="relu", strides=1, padding="same")(x)
     encoder_outputs = layers.Conv2D(latent_dim, 1, padding="same")(x)
     return keras.Model(encoder_inputs, encoder_outputs, name="encoder")
 
@@ -97,7 +99,9 @@ def get_decoder(latent_dim=16):
     x = layers.Conv2DTranspose(64, 3, activation="relu", strides=2, padding="same")(
         latent_inputs
     )
-    x = layers.Conv2DTranspose(32, 3, activation="relu", strides=2, padding="same")(x)
+    x = layers.Conv2DTranspose(64, 3, activation="relu", strides=2, padding="same")(x)
+    x = layers.Conv2DTranspose(64, 3, activation="relu", strides=1, padding="same")(x)
+    x = layers.Conv2DTranspose(32, 3, activation="relu", strides=1, padding="same")(x)
     decoder_outputs = layers.Conv2DTranspose(3, 3, padding="same")(x)
     return keras.Model(latent_inputs, decoder_outputs, name="decoder")
 
@@ -126,6 +130,9 @@ class VQVAETrainer(keras.models.Model):
             name="reconstruction_loss"
         )
         self.vq_loss_tracker = keras.metrics.Mean(name="vq_loss")
+
+    def call(self, x, training=None, mask=None):
+        return self.vqvae.call(x)
 
     @property
     def metrics(self):
@@ -166,9 +173,6 @@ class VQVAETrainer(keras.models.Model):
         # The exact same thing as train_step
         return self.train_step(x)
 
-    def call(self, x):
-        return self.vqvae.call(x)
-
 def get_image_processor(image_size):
     def process_image(image):
         image = tf.image.resize_with_crop_or_pad(image, image_size[0], image_size[1])
@@ -200,38 +204,99 @@ def load_dtd_dataset(image_size, batch_size):
 
     return train_ds, val_ds
 
+def plot_results(original, codes, reconstruction):
+    plt.subplot(1, 3, 1)
+    plt.imshow(cv.cvtColor(original, cv.COLOR_HSV2RGB))
+    plt.title("Original")
+    plt.axis("off")
+
+    plt.subplot(1, 3, 2)
+    plt.imshow(codes)
+    plt.title("Codes")
+    plt.axis("Off")
+
+    plt.subplot(1, 3, 3)
+    plt.imshow(cv.cvtColor(reconstruction, cv.COLOR_HSV2RGB))
+    plt.title("Reconstruction")
+    plt.axis("off")
+
+    plt.show()
+
+
+def __parse_args():
+    from argparse import ArgumentParser
+    parser = ArgumentParser()
+    # If training new model, save in new folder in this location.
+    # If not training, load model saved in this folder. Will not look deeper.
+    parser.add_argument("--model_loc")
+    args = parser.parse_args()
+
+    return Path(args.model_loc)
 
 if __name__ == "__main__":
     print("Starting")
 
     # SETTINGS
+    TRAIN_NEW_MODEL = True
     BATCH_SIZE = 16
     IMAGE_SIZE = (64, 64)   # To match DOOM texture size
     EPOCHS = 500
+    LATENT_DIM = 16
+    NUM_EMBEDDINGS = 128
+
+    # Parse command line arguments
+    model_path = __parse_args()
 
     # GET DATASET
     # TODO: Add data augmentation to dataset
     train_ds, val_ds = load_dtd_dataset(IMAGE_SIZE, BATCH_SIZE)
 
-    vars = []
-    for batch in train_ds:
-        batch_variance = tfp.stats.variance(batch)
-        vars.append(batch_variance)
+    if TRAIN_NEW_MODEL:
+        vars = []
+        for batch in train_ds:
+            batch_variance = tfp.stats.variance(batch)
+            vars.append(batch_variance)
 
-    # TODO: calculate actual variance!!
-    # NOTE this is not the variance of the entire dataset. See https://math.stackexchange.com/questions/3604607/can-i-work-out-the-variance-in-batches and update later.
-    data_variance = np.mean(vars)
+        # TODO: calculate actual variance!!
+        # NOTE this is not the variance of the entire dataset. See https://math.stackexchange.com/questions/3604607/can-i-work-out-the-variance-in-batches and update later.
+        data_variance = np.mean(vars)
 
-    early_stopping = keras.callbacks.EarlyStopping(monitor="val_loss", min_delta=0.001, patience=5)
+        early_stopping = keras.callbacks.EarlyStopping(monitor="val_loss", min_delta=0.0001, patience=10)
 
-    vqvae_trainer = VQVAETrainer(data_variance, latent_dim=16, num_embeddings=128)
-    vqvae_trainer.compile(optimizer=keras.optimizers.Adam())
-    vqvae_trainer.fit(train_ds, validation_data=val_ds, epochs=EPOCHS, callbacks=[early_stopping])
+        vqvae_trainer = VQVAETrainer(data_variance, latent_dim=LATENT_DIM, num_embeddings=NUM_EMBEDDINGS)
+        print(vqvae_trainer.vqvae.summary())
+        vqvae_trainer.compile(optimizer=keras.optimizers.Adam())
+        vqvae_trainer.fit(train_ds, validation_data=val_ds, epochs=EPOCHS, callbacks=[early_stopping])
+        vqvae = vqvae_trainer.vqvae
 
-    results = vqvae_trainer.evaluate(val_ds)
-    time_now = datetime.now().strftime('%m-%d-%H')
+        results = vqvae_trainer.evaluate(val_ds)
+        time_now = datetime.now().strftime('%m-%d-%H')
 
-    keras.models.save_model(vqvae_trainer, f'E:\Documents\projects\VQVAEWFC\saved_models\\trainer_{time_now}_{str(results)}')
-    keras.models.save_model(vqvae_trainer.vqvae,
-                            f'E:\Documents\projects\VQVAEWFC\saved_models\\raw_model{time_now}_{str(results)}')
+        print("Model trained. Saving model.")
+
+        keras.models.save_model(vqvae_trainer.vqvae,
+                                model_path / f'raw_model{time_now}_{str(results)}')
+        # keras.models.save_model(vqvae_trainer, model_path / 'trainer_{time_now}_{str(results)}')
+    else:
+        vqvae = keras.models.load_model(model_path, custom_objects={"VectorQuantizer": VectorQuantizer})
+
+    print(vqvae.summary())
+
+    val_batch = list(val_ds.take(1).as_numpy_iterator())
+    encoder = vqvae.get_layer("encoder")
+    quantizer = vqvae.get_layer("vector_quantizer")
+    decoder = vqvae.get_layer("decoder")
+
+    input_batch = val_batch[0]
+
+    encoded_batch = encoder.predict(input_batch)
+    flat_encoded_batch = encoded_batch.reshape(-1, encoded_batch.shape[-1])
+    code_batch_indices = quantizer.get_code_indices(flat_encoded_batch)
+    code_batch_indices = code_batch_indices.numpy().reshape(encoded_batch.shape[:-1])
+    quantized_batch = quantizer(encoded_batch)
+    output_batch = decoder.predict(quantized_batch)
+
+    for idx in range(input_batch.shape[0]):
+
+        plot_results(input_batch[idx], code_batch_indices[idx], output_batch[idx])
 
