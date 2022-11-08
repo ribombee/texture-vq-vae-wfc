@@ -35,9 +35,9 @@ def load_dtd_dataset(image_size, batch_size):
 def __parse_args():
     from argparse import ArgumentParser
 
-    parser = ArgumentParser
+    parser = ArgumentParser()
     parser.add_argument("--vqvae_loc")
-    parser.add_argument ("--code_save_loc")
+    parser.add_argument("--code_save_loc")
 
     args = parser.parse_args()
 
@@ -62,9 +62,9 @@ if __name__ == "__main__":
         code_batch_indices = quantizer.get_code_indices(flat_encoded_batch)
         code_batch_indices = code_batch_indices.numpy().reshape(encoded_batch.shape[:-1])
 
-        for texture in batch:
+        for code in code_batch_indices:
 
-            for row in texture:
+            for row in code:
                 for column in row:
                     # Build out string for training WFC
                     pass
