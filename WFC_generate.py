@@ -25,7 +25,7 @@ def generate_new_level(height, width, model, wrapping=False, max_attempts = 5):
 			pos, pat = observe(level, pattern_occurrences, possible_positions)
 
 			level[pos[0]][pos[1]] = [pat]
-			# print_level_in_progress(level, domain)
+
 
 			level = propagate(level, possible_patterns, allowed_adjacencies, 
 												pattern_occurrences, wrapping)
@@ -251,82 +251,12 @@ def finalize_level(level):
 
 	return final_level
 
-def print_level_in_progress(level, domain):
-
-	level_in_progress = [[cell[0][0][0] if len(cell) == 1 else len(cell) for cell in row] for row in level]
-
-	if domain == "colors":
-		for row in level_in_progress:
-			for cell in row:
-				if cell == 'W':
-					color = fg.white
-				elif cell == 'R':
-					color = fg.red
-				elif cell == 'B':
-					color = fg.da_grey
-				else:
-					color = fg.da_yellow
-				print(color + f"{cell}", end=" ")
-			print("")
-		print("")
-		print(fg.rs+"")
-	
-	elif domain == "SMB":
-		for row in level_in_progress:
-			for cell in row:
-				if cell in ["X", "S"]:
-					color = fg.da_red
-				elif cell == "-":
-					color = fg.li_cyan
-				elif cell in ["?", "Q"]:
-					color = fg.yellow
-				elif cell == "E":
-					color = fg.red
-				elif cell in ["<", ">", "[", "]"]:
-					color = fg.green
-				elif cell == "o":
-					color = fg.li_yellow
-				elif cell in ["B", "b"]:
-					color = fg.da_grey
-				else:
-					color = fg.white
-				print(color + f"{cell}", end=" ")
-			print("")
-		print("")
-		print(fg.rs+"")
-	elif domain == "LR":
-		for row in level_in_progress:
-			for cell in row:
-				if cell == "B":
-					color = fg.da_red
-				elif cell == "b":
-					color = fg.red
-				elif cell == ".":
-					color = fg.da_grey
-				elif cell == "-":
-					color = fg.white
-				elif cell == "#":
-					color = fg.white
-				elif cell == "G":
-					color = fg.yellow
-				elif cell == "E":
-					color = fg.li_magenta
-				elif cell == "M":
-					color = fg.li_cyan
-				else:
-					color = fg.da_yellow
-				print(color + f"{cell}", end=" ")
-			print("")
-		print("")
-		print(fg.rs+"")
-
-	return level_in_progress
-
 
 if __name__ == '__main__':
 	# domain = "SMB"
 	# domain = "LR"
 	domain = "colors"
+	textureLocation = "Textures/Texture0.npy" # trained model to load
 
 	if domain == "SMB":
 		wrapping = False
@@ -340,13 +270,13 @@ if __name__ == '__main__':
 
 	elif domain == "colors":
 		wrapping = True
-		level_height = 20
-		level_width = 20
+		level_height = 32
+		level_width = 32
 
-	trained_model = pickle.load(open(f"trained_WFC_{domain}.pickle", "rb"))
+	trained_model = pickle.load(open(f"trained_WFC_"+textureLocation[9:-4]+".pickle", "rb"))
 
 	level = generate_new_level(level_height, level_width, trained_model, 
-											wrapping=wrapping, max_attempts=5)
+											wrapping=wrapping, max_attempts=20)
 
 	# print_level_in_progress(level, trained_model["domain"])
 
