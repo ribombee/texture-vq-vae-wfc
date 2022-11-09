@@ -1,11 +1,9 @@
-import json
+
 import random
 import math
-import sys
-import os
-import glob
 import pickle
-from sty import fg, bg, ef, rs, Style, RgbFg
+import numpy as np
+#from sty import fg, bg, ef, rs, Style, RgbFg
 
 def generate_new_level(height, width, model, wrapping=False, max_attempts = 5):
 	
@@ -279,7 +277,10 @@ if __name__ == '__main__':
 											wrapping=wrapping, max_attempts=20)
 
 	# print_level_in_progress(level, trained_model["domain"])
+	numpyfile = np.array(level) # level generated to numpy array
+	np.save('output/generated'+textureLocation[9:-4] , numpyfile)	#saving the numpy in the output
 
+	print("holamundo")
 	with open('output/generated.txt', 'w') as output:
 		for row in level:
 			for cell in row:
