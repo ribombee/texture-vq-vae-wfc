@@ -6,6 +6,7 @@ import numpy as np
 import tensorflow_datasets as tfds
 
 
+
 def get_image_processor(image_size):
 
     def process_image(image):
@@ -45,7 +46,11 @@ def __parse_args():
 
 if __name__ == "__main__":
 
-    vqvae_path, code_save_path = __parse_args()
+    #vqvae_path, code_save_path = __parse_args()
+
+    vqvae_path = "saved_models/vqvae_10-29-20-10"
+    code_save_path = "output"
+
 
     vqvae = keras.models.load_model(vqvae_path, custom_objects={"VectorQuantizer": VectorQuantizer})
 
@@ -54,7 +59,7 @@ if __name__ == "__main__":
     quantizer = vqvae.get_layer("vector_quantizer")
     decoder = vqvae.get_layer("decoder")
 
-    idx = 0
+
     for batch in train_ds:
 
         encoded_batch = encoder.predict(batch)
@@ -62,10 +67,17 @@ if __name__ == "__main__":
         code_batch_indices = quantizer.get_code_indices(flat_encoded_batch)
         code_batch_indices = code_batch_indices.numpy().reshape(encoded_batch.shape[:-1])
 
-        for code in code_batch_indices:
+        idx = 0 # to get the different texture files for WFC
+        for texture in code_batch_indices:
+            np.save('Textures/Texture'+str(idx),texture)
+            idx += 1 # so each texture had a different name
 
-            for row in code:
-                for column in row:
+
+            #each texture is a 16x16x3
+            #for row in texture:
+                #for column in row:
+                    #print("doing something")
+
                     # Build out string for training WFC
-                    pass
+                    #pass
 
