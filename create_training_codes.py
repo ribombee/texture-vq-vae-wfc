@@ -36,9 +36,9 @@ def load_dtd_dataset(image_size, batch_size):
 def __parse_args():
     from argparse import ArgumentParser
 
-    parser = ArgumentParser
+    parser = ArgumentParser()
     parser.add_argument("--vqvae_loc")
-    parser.add_argument ("--code_save_loc")
+    parser.add_argument("--code_save_loc")
 
     args = parser.parse_args()
 
@@ -73,13 +73,11 @@ if __name__ == "__main__":
             idx += 1 # so each texture had a different name
 
 
-
-
-
             #each texture is a 16x16x3
             #for row in texture:
                 #for column in row:
                     #print("doing something")
+
                     # Build out string for training WFC
                     #pass
 
