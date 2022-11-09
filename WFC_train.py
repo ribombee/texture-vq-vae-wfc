@@ -1,9 +1,9 @@
-import sys
-import os
-import glob
+#import sys
+#import os
+#import glob
 import pickle
 import numpy as np
-import random
+#import random
 
 
 def load_colors_domain():
@@ -18,8 +18,8 @@ def load_colors_domain():
 #def load_textures():
 
 
-def load_npy_file(name):
-    texture = np.load(name, allow_pickle = True)
+def load_npy_file_to_list(dir_file):
+    texture = np.load(dir_file, allow_pickle = True)
     return texture.tolist()
 
 
@@ -42,7 +42,7 @@ def extract_patterns(examples, pattern_height, pattern_width, row_offset=1,
                 # if not using the wrapping version, then skip any positions
                 # that extend beyond the edge of the example
                 if not wrapping and \
-                        (col_index + pattern_width > ex_width or \
+                        (col_index + pattern_width > ex_width or
                          row_index + pattern_height > ex_height):
                     continue
 
@@ -198,7 +198,7 @@ if __name__ == '__main__':
     examples = [] # to store all the textures.
 
 
-    examples.append(load_npy_file("Textures/Texture0.npy")) #Texture to be trained
+    examples.append(load_npy_file_to_list("Textures/Texture0.npy")) #Texture to be trained
     #examples = load_colors_domain()
 
     all_patterns = extract_patterns(examples, pattern_height, pattern_width,
