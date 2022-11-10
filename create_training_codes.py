@@ -4,20 +4,7 @@ from tensorflow import keras
 from model import VectorQuantizer
 import numpy as np
 import tensorflow_datasets as tfds
-
-
-
-def get_image_processor(image_size):
-
-    def process_image(image):
-        image = tf.image.resize_with_crop_or_pad(image, image_size[0], image_size[1])
-
-        image = image / 255 # Normalize
-        image = tf.image.rgb_to_hsv(image) # Swap to hsv
-
-        return image
-
-    return process_image
+from util import get_image_processor
 
 def load_dtd_dataset(image_size, batch_size):
     train_ds, val_ds, test_ds = tfds.load('dtd', split=['train', 'validation', 'test'], shuffle_files=True)
@@ -59,7 +46,7 @@ if __name__ == "__main__":
     quantizer = vqvae.get_layer("vector_quantizer")
     decoder = vqvae.get_layer("decoder")
 
-
+    idx = 0  # to get the different texture files for WFC
     for batch in train_ds:
 
         encoded_batch = encoder.predict(batch)
@@ -67,17 +54,6 @@ if __name__ == "__main__":
         code_batch_indices = quantizer.get_code_indices(flat_encoded_batch)
         code_batch_indices = code_batch_indices.numpy().reshape(encoded_batch.shape[:-1])
 
-        idx = 0 # to get the different texture files for WFC
         for texture in code_batch_indices:
-            np.save('Textures/Texture'+str(idx),texture)
-            idx += 1 # so each texture had a different name
-
-
-            #each texture is a 16x16x3
-            #for row in texture:
-                #for column in row:
-                    #print("doing something")
-
-                    # Build out string for training WFC
-                    #pass
-
+            np.save(f'Textures/Texture_{idx}',texture)
+            idx += 1 # so each texture has a different name

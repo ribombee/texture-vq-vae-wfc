@@ -11,6 +11,7 @@ import cv2 as cv
 from datetime import datetime
 from pathlib import Path
 from model import *
+from util import plot_results
 
 
 def get_image_processor(image_size, augment=False):
@@ -51,27 +52,6 @@ def load_dtd_dataset(image_size, batch_size):
     val_ds = (val_ds.cache().map(val_test_image_processor).batch(batch_size))
 
     return train_ds, val_ds
-
-def plot_results(original, codes, reconstruction, img_save_path):
-    plt.subplot(1, 3, 1)
-    plt.imshow(cv.cvtColor(original, cv.COLOR_HSV2RGB))
-    plt.title("Original")
-    plt.axis("off")
-
-    plt.subplot(1, 3, 2)
-    plt.imshow(codes)
-    plt.title("Codes")
-    plt.axis("Off")
-
-    plt.subplot(1, 3, 3)
-    plt.imshow(cv.cvtColor(reconstruction, cv.COLOR_HSV2RGB))
-    plt.title("Reconstruction")
-    plt.axis("off")
-
-    plt.savefig((img_save_path / f"{idx}.png"), dpi=300, bbox_inches="tight")
-    plt.show()
-    plt.close()
-
 
 def __parse_args():
     from argparse import ArgumentParser
