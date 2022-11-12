@@ -72,7 +72,7 @@ if __name__ == "__main__":
     IMAGE_SIZE = (64, 64)   # To match DOOM texture size
     EPOCHS = 500
     LATENT_DIM = 16
-    NUM_EMBEDDINGS = 128
+    NUM_EMBEDDINGS = 64
     # How much smaller the latent representation should be. Scaled as a multiple of 2^(-LATENT_SHRINK_SCALE)
     LATENT_SHRINK_SCALE = 1
 
@@ -109,7 +109,7 @@ if __name__ == "__main__":
         print("Model trained. Saving model.")
 
         keras.models.save_model(vqvae_trainer.vqvae,
-                                model_path / f'vqvae_{time_now}_{str(results)}')
+                                model_path / f'vqvae_{time_now}')
         # keras.models.save_model(vqvae_trainer, model_path / 'trainer_{time_now}_{str(results)}')
     else:
         vqvae = keras.models.load_model(model_path, custom_objects={"VectorQuantizer": VectorQuantizer})

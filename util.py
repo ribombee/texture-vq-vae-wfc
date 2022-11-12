@@ -31,6 +31,6 @@ def plot_results(original, codes, reconstruction, img_save_path):
     plt.title("Reconstruction")
     plt.axis("off")
 
-    plt.savefig((img_save_path / f"{idx}.png"), dpi=300, bbox_inches="tight")
+    plt.savefig(img_save_path, dpi=300, bbox_inches="tight")
     plt.show()
     plt.close()
