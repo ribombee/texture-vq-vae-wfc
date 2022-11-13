@@ -106,8 +106,8 @@ def run_decoder(texture_codes, num_new_patterns, vqvae, num_embeddings, encoding
 
 if __name__ == "__main__":
 
-    num_new_textures = 5
-    NUM_EMBEDDINGS = 128
+    num_new_textures = 1
+    NUM_EMBEDDINGS = 32
 
     texture_path, vqvae_path, save_path = __parse_args()
 
@@ -115,38 +115,8 @@ if __name__ == "__main__":
     print("Loaded model")
 
     # This code chunk was used to debug the vq-vae and should be moved to its own file if useful.
-    '''
+
     all_texture_paths = texture_path.glob('*')
-
-    for sprite_path in all_texture_paths:
-        print(sprite_path)
-        sprite = cv.cvtColor(cv.imread(str(sprite_path)), cv.COLOR_BGR2HSV)
-
-        hue, sat, val = cv.split(sprite)
-        hue = hue / 179
-        sat = sat / 255
-        val = val / 255
-
-        normalized_sprite = np.stack([hue, sat, val])
-        normalized_sprite = np.transpose(normalized_sprite, (1, 2, 0))
-
-        recreation = model.predict(np.expand_dims(normalized_sprite, 0))
-
-        hue, sat, val = recreation[0][:,:,0], recreation[0][:,:,1], recreation[0][:,:,2]
-
-        hue = np.clip(hue * 179, 0, 179)
-        sat = np.clip(sat * 255, 0, 255)
-        val = np.clip(val * 255, 0, 255)
-
-        scaled_recreation = np.stack([hue, sat, val])
-        scaled_recreation = np.transpose(scaled_recreation, (1, 2, 0))
-
-        embeds = model.get_layer("encoder").predict(np.expand_dims(sprite, 0))
-        flat_codes = embeds.reshape(-1, embeds.shape[-1])
-        codes = model.get_layer("vector_quantizer").get_code_indices(flat_codes)
-        codes = codes.numpy().reshape(embeds.shape[:-1])
-        plot_results(sprite, codes[0], recreation[0], str(save_path / sprite_path.stem))
-    '''
 
     texture = load_texture(texture_path)
 

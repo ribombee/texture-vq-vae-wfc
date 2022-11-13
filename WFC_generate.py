@@ -1,4 +1,6 @@
-
+import os
+# Hoping the below line stops a very annoying issue with ctrl c bricking pycharm : )
+os.environ['FOR_DISABLE_CONSOLE_CTRL_HANDLER'] = '1'
 import random
 import math
 import pickle

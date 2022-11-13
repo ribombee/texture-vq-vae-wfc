@@ -68,11 +68,13 @@ if __name__ == "__main__":
 
     # SETTINGS
     TRAIN_NEW_MODEL = True
+    TEST_ON_DOOM = True
+    doom_sprite_paths = Path("data/Doom_textures/doom_sprites").glob('*')
     BATCH_SIZE = 16
     IMAGE_SIZE = (64, 64)   # To match DOOM texture size
     EPOCHS = 500
-    LATENT_DIM = 16
-    NUM_EMBEDDINGS = 64
+    LATENT_DIM = 64
+    NUM_EMBEDDINGS = 16
     # How much smaller the latent representation should be. Scaled as a multiple of 2^(-LATENT_SHRINK_SCALE)
     LATENT_SHRINK_SCALE = 1
 
@@ -112,6 +114,7 @@ if __name__ == "__main__":
                                 model_path / f'vqvae_{time_now}')
         # keras.models.save_model(vqvae_trainer, model_path / 'trainer_{time_now}_{str(results)}')
     else:
+        time_now = datetime.now().strftime('%m-%d-%H-%m')
         vqvae = keras.models.load_model(model_path, custom_objects={"VectorQuantizer": VectorQuantizer})
 
     print(vqvae.summary())
@@ -140,5 +143,34 @@ if __name__ == "__main__":
 
     for idx in range(input_batch.shape[0]):
 
-        plot_results(input_batch[idx], code_batch_indices[idx], output_batch[idx], img_save_path)
+        plot_results(input_batch[idx], code_batch_indices[idx], output_batch[idx], img_save_path, NUM_EMBEDDINGS)
 
+    if TEST_ON_DOOM:
+        for sprite_path in doom_sprite_paths:
+            print(sprite_path)
+            sprite = cv.cvtColor(cv.imread(str(sprite_path)), cv.COLOR_BGR2HSV)
+
+            hue, sat, val = cv.split(sprite)
+            hue = hue / 179
+            sat = sat / 255
+            val = val / 255
+
+            normalized_sprite = np.stack([hue, sat, val])
+            normalized_sprite = np.transpose(normalized_sprite, (1, 2, 0))
+
+            recreation = vqvae.predict(np.expand_dims(normalized_sprite, 0))
+
+            hue, sat, val = recreation[0][:, :, 0], recreation[0][:, :, 1], recreation[0][:, :, 2]
+
+            hue = np.clip(hue * 179, 0, 179)
+            sat = np.clip(sat * 255, 0, 255)
+            val = np.clip(val * 255, 0, 255)
+
+            scaled_recreation = np.stack([hue, sat, val])
+            scaled_recreation = np.transpose(scaled_recreation, (1, 2, 0))
+
+            embeds = vqvae.get_layer("encoder").predict(np.expand_dims(sprite, 0))
+            flat_codes = embeds.reshape(-1, embeds.shape[-1])
+            codes = vqvae.get_layer("vector_quantizer").get_code_indices(flat_codes)
+            codes = codes.numpy().reshape(embeds.shape[:-1])
+            plot_results(sprite, codes[0], recreation[0], str(img_save_path / sprite_path.stem), NUM_EMBEDDINGS)

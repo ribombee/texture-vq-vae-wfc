@@ -1,6 +1,7 @@
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import cv2 as cv
+import seaborn as sns
 
 def get_image_processor(image_size):
 
@@ -15,14 +16,16 @@ def get_image_processor(image_size):
     return process_image
 
 
-def plot_results(original, codes, reconstruction, img_save_path):
+def plot_results(original, codes, reconstruction, img_save_path, codebook_size=64):
     plt.subplot(1, 3, 1)
     plt.imshow(cv.cvtColor(original, cv.COLOR_HSV2RGB))
     plt.title("Original")
     plt.axis("off")
 
     plt.subplot(1, 3, 2)
-    plt.imshow(codes)
+    plt.imshow(codes, vmin= 0, vmax = codebook_size)
+    # TODO: make this plot bigger or something to let annot=True fit in the plot nicely
+    # sns.heatmap(codes, vmin=0, vmax=codebook_size)
     plt.title("Codes")
     plt.axis("Off")
 
