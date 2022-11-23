@@ -14,3 +14,10 @@ This will train the VQ-VAE and save the new model to a folder of the format:
             ...
 ```
 Where the saved model will be automatically saved within the `vqvae_%m-%d-%h-%M/` folder. e.g. `vqvae_10-29-20-11/` means 10th month, 29th day, 10th hour, and 11th minute.
+
+### Using an already trained model:
+Simply provide the folder for an already trained model as an argument.  
+For example, if you wish to use the model `vqvae_10-29-20-11/` you would run:
+```
+python train_VQVAE.py --model_loc saved_models/vqvae_10-29-20-11
+```
