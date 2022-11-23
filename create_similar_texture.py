@@ -107,7 +107,8 @@ def run_decoder(texture_codes, num_new_patterns, vqvae, num_embeddings, encoding
 if __name__ == "__main__":
 
     num_new_textures = 1
-    NUM_EMBEDDINGS = 32
+    NUM_EMBEDDINGS = 16
+    LATENT_DIM = 64
 
     texture_path, vqvae_path, save_path = __parse_args()
 
@@ -140,12 +141,12 @@ if __name__ == "__main__":
         print("Codes generated, decoding...")
         # Last parameter is the embedding size, it should match the VQVAE embedding size
         new_texture = run_decoder(new_texture_codes, num_new_textures, model, num_embeddings=NUM_EMBEDDINGS,
-                                   encoding_shape=(32, 32, 16))
+                                   encoding_shape=(32, 32, LATENT_DIM))
 
-        if num_new_textures == 1:
-            # To match the shape when num_new_textures > 1
-            new_textures = [new_textures]
-            new_texture_codes = [new_texture_codes]
+        # if num_new_textures == 1:
+        #     # To match the shape when num_new_textures > 1
+        #     new_textures = [new_texture]
+        #     new_texture_codes = [new_texture_codes]
 
         img_save_path = save_path / f'texture_{idx}.png'
         plot_results(texture, new_texture_codes, new_texture[0][0], img_save_path)

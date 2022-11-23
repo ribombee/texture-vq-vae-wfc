@@ -76,7 +76,7 @@ if __name__ == "__main__":
     LATENT_DIM = 64
     NUM_EMBEDDINGS = 16
     # How much smaller the latent representation should be. Scaled as a multiple of 2^(-LATENT_SHRINK_SCALE)
-    LATENT_SHRINK_SCALE = 1
+    LATENT_SHRINK_SCALE = 0
 
     # Parse command line arguments
     model_path = __parse_args()
