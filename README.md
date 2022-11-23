@@ -14,7 +14,7 @@ To train a new VQ-VAE, run the following command:
 
 `python train_VQVAE.py --model_loc <model save location>`
 
-This will train a new VQ-VAE and save it to `<model_loc>` in a new folder named `vqvae_%m_%d_%H_%M` where %m, %d, %H and %M represent the month, day hour and minute the training finished.
+This will train a new VQ-VAE and save it to `<model_loc>` in a new folder named `vqvae-%m-%d-%H-%M_LD%LD_NE%NE` where %m, %d, %H and %M represent the month, day hour and minute the training finished. The %LD represents the latent dimension of the embedding, and the %NE the number of embeddings. These can be helpful to keep track of to make sure these values match in the code for `create_similar_textures.py`
 
 ### Running the neurosymbolic generation
 

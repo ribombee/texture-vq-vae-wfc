@@ -111,7 +111,7 @@ if __name__ == "__main__":
         print("Model trained. Saving model.")
 
         keras.models.save_model(vqvae_trainer.vqvae,
-                                model_path / f'vqvae_{time_now}')
+                                model_path / f'vqvae_{time_now}_LD{LATENT_DIM}_NE{NUM_EMBEDDINGS}')
         # keras.models.save_model(vqvae_trainer, model_path / 'trainer_{time_now}_{str(results)}')
     else:
         time_now = datetime.now().strftime('%m-%d-%H-%M')
