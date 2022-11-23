@@ -61,6 +61,8 @@ def __parse_args():
     parser.add_argument("--model_loc")
     args = parser.parse_args()
 
+    print("HERE", args.model_loc, args)
+
     return Path(args.model_loc)
 
 if __name__ == "__main__":
@@ -106,7 +108,7 @@ if __name__ == "__main__":
         vqvae = vqvae_trainer.vqvae
 
         results = vqvae_trainer.evaluate(val_ds)
-        time_now = datetime.now().strftime('%m-%d-%H-%m')
+        time_now = datetime.now().strftime('%m-%d-%H-%M')
 
         print("Model trained. Saving model.")
 
