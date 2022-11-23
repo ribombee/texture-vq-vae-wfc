@@ -7,7 +7,7 @@ This repository contains the source code for a research project on generating "s
 There are two files you may want to run in this project.
 The instructions for running both can be found below, but to run them successfully you must first install all required dependancies. To do this, please install everything in requirements.txt, for example by running the following command: 
 
-`pip install -idk requirements.txt`
+`pip install -r requirements.txt`
 
 ### Training a new VQ-VAE
 To train a new VQ-VAE, run the following command:
