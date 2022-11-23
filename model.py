@@ -158,6 +158,7 @@ def get_decoder(latent_dim=16, latent_shrink_scale=2):
         strides = 1
 
     x = layers.Conv2DTranspose(32, 3, activation="relu", strides=strides, padding="same")(x)
+    x = layers.Conv2DTranspose(32, 3, activation="relu", strides=strides, padding="same")(x)
     decoder_outputs = layers.Conv2DTranspose(3, 3, padding="same")(x)
     return keras.Model(latent_inputs, decoder_outputs, name="decoder")
 

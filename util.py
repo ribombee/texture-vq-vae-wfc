@@ -1,7 +1,7 @@
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import cv2 as cv
-import seaborn as sns
+import numpy as np
 
 def get_image_processor(image_size):
 
@@ -14,6 +14,30 @@ def get_image_processor(image_size):
         return image
 
     return process_image
+
+
+def hsv_tf_to_cv(image):
+
+    hue, sat, val = cv.split(image)
+    hue = np.clip(hue * 179, 0, 179)
+    sat = np.clip(sat * 255, 0, 255)
+    val = np.clip(val * 255, 0, 255)
+
+    scaled = np.stack([hue, sat, val])
+    scaled = np.transpose(scaled, (1, 2, 0))
+
+    return scaled
+
+def hsv_cv_to_tf(image):
+    hue, sat, val = cv.split(image)
+    hue = hue / 179
+    sat = sat / 255
+    val = val / 255
+
+    normalized_sprite = np.stack([hue, sat, val])
+    normalized_sprite = np.transpose(normalized_sprite, (1, 2, 0))
+
+    return normalized_sprite
 
 
 def plot_results(original, codes, reconstruction, img_save_path, codebook_size=64):
