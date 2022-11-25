@@ -67,7 +67,7 @@ if __name__ == "__main__":
     print("Starting")
 
     # SETTINGS
-    TRAIN_NEW_MODEL = False
+    TRAIN_NEW_MODEL = True
     TEST_ON_DOOM = False
     doom_sprite_paths = Path("data/Doom_textures/doom_sprites").glob('*')
     BATCH_SIZE = 16
