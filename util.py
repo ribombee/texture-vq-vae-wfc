@@ -61,3 +61,26 @@ def plot_results(original, codes, reconstruction, img_save_path, codebook_size=6
     plt.savefig(img_save_path, dpi=300, bbox_inches="tight")
     plt.show()
     plt.close()
+
+
+def plot_results1(original, codes, reconstruction, img_save_path, codebook_size=64):
+    plt.subplot(1, 3, 1)
+    plt.imshow(original)
+    plt.title("Original")
+    plt.axis("off")
+
+    plt.subplot(1, 3, 2)
+    plt.imshow(codes, vmin= 0, vmax = codebook_size)
+    # TODO: make this plot bigger or something to let annot=True fit in the plot nicely
+    # sns.heatmap(codes, vmin=0, vmax=codebook_size)
+    plt.title("Codes")
+    plt.axis("Off")
+
+    plt.subplot(1, 3, 3)
+    plt.imshow(reconstruction)
+    plt.title("Reconstruction")
+    plt.axis("off")
+
+    plt.savefig(img_save_path, dpi=300, bbox_inches="tight")
+    plt.show()
+    plt.close()
