@@ -75,7 +75,7 @@ if __name__ == "__main__":
     BATCH_SIZE = 16
     IMAGE_SIZE = (64, 64)   # To match DOOM texture size
     EPOCHS = 500
-    LATENT_DIM = 64
+    LATENT_DIM = 128
     NUM_EMBEDDINGS = 16
     # How much smaller the latent representation should be. Scaled as a multiple of 2^(-LATENT_SHRINK_SCALE)
     LATENT_SHRINK_SCALE = 0
@@ -148,7 +148,7 @@ if __name__ == "__main__":
         input_sprite = hsv_tf_to_cv(input_batch[idx])
         output_sprite = hsv_tf_to_cv(output_batch[idx])
 
-        plot_results(input_sprite, code_batch_indices[idx], output_batch[idx], img_save_path, NUM_EMBEDDINGS)
+        plot_results(input_sprite, code_batch_indices[idx], output_batch[idx], img_save_path / f'{idx}.png', NUM_EMBEDDINGS)
 
     if TEST_ON_DOOM:
         for sprite_path in doom_sprite_paths:
@@ -165,4 +165,4 @@ if __name__ == "__main__":
             flat_codes = embeds.reshape(-1, embeds.shape[-1])
             codes = vqvae.get_layer("vector_quantizer").get_code_indices(flat_codes)
             codes = codes.numpy().reshape(embeds.shape[:-1])
-            plot_results(sprite, codes[0], recreation[0], str(img_save_path / sprite_path.stem), NUM_EMBEDDINGS)
+            plot_results(sprite, codes[0], recreation[0], img_save_path / f'{sprite_path.stem}.png', NUM_EMBEDDINGS)
