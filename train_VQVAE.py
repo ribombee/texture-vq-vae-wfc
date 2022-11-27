@@ -138,7 +138,7 @@ if __name__ == "__main__":
     if not TRAIN_NEW_MODEL:
         img_save_path = model_path / "val_plots"
     else:
-        img_save_path = model_path / f'vqvae_{time_now}' / "val_plots"
+        img_save_path = model_path / f'vqvae_{time_now}_LD{LATENT_DIM}_NE{NUM_EMBEDDINGS}' / "val_plots"
 
     if not img_save_path.exists():
         img_save_path.mkdir()
