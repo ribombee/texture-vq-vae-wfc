@@ -75,8 +75,8 @@ if __name__ == "__main__":
     BATCH_SIZE = 16
     IMAGE_SIZE = (64, 64)   # To match DOOM texture size
     EPOCHS = 500
-    LATENT_DIM = 128
-    NUM_EMBEDDINGS = 16
+    LATENT_DIM = 512
+    NUM_EMBEDDINGS = 64
     # How much smaller the latent representation should be. Scaled as a multiple of 2^(-LATENT_SHRINK_SCALE)
     LATENT_SHRINK_SCALE = 0
 
