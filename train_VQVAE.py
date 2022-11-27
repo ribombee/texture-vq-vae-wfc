@@ -11,7 +11,7 @@ import cv2 as cv
 from datetime import datetime
 from pathlib import Path
 from model import *
-from util import plot_results, hsv_cv_to_tf, hsv_tf_to_cv
+from util import plot_results, plot_results1, hsv_cv_to_tf, hsv_tf_to_cv
 
 
 def get_image_processor(image_size, augment=False):
@@ -145,10 +145,14 @@ if __name__ == "__main__":
 
     for idx in range(input_batch.shape[0]):
 
-        input_sprite = hsv_tf_to_cv(input_batch[idx])
-        output_sprite = hsv_tf_to_cv(output_batch[idx])
+        #input_sprite = hsv_tf_to_cv(input_batch[idx])
+        #output_sprite = hsv_tf_to_cv(output_batch[idx])
 
-        plot_results(input_sprite, code_batch_indices[idx], output_batch[idx], img_save_path / f'{idx}.png', NUM_EMBEDDINGS)
+        input_sprite = tf.image.hsv_to_rgb(input_batch[idx])
+        output_sprite = tf.image.hsv_to_rgb(output_batch[idx])
+
+        #plot_results(input_sprite, code_batch_indices[idx], output_batch[idx], img_save_path / f'{idx}.png', NUM_EMBEDDINGS)
+        plot_results1(tf.keras.preprocessing.image.array_to_img(input_sprite), code_batch_indices[idx], tf.keras.preprocessing.image.array_to_img(output_sprite), img_save_path / f'{idx}.png', NUM_EMBEDDINGS)
 
     if TEST_ON_DOOM:
         for sprite_path in doom_sprite_paths:
