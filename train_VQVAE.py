@@ -13,6 +13,8 @@ from pathlib import Path
 from model import *
 from util import plot_results, plot_results1, hsv_cv_to_tf, hsv_tf_to_cv
 
+#Set random seed for reproducability
+tf.keras.utils.set_random_seed(42)
 
 def get_image_processor(image_size, augment=False):
 
@@ -75,8 +77,8 @@ if __name__ == "__main__":
     BATCH_SIZE = 16
     IMAGE_SIZE = (64, 64)   # To match DOOM texture size
     EPOCHS = 500
-    LATENT_DIM = 512
-    NUM_EMBEDDINGS = 64
+    LATENT_DIM = 32
+    NUM_EMBEDDINGS = 16
     # How much smaller the latent representation should be. Scaled as a multiple of 2^(-LATENT_SHRINK_SCALE)
     LATENT_SHRINK_SCALE = 0
 
