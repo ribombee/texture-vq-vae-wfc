@@ -59,11 +59,11 @@ def train_texture_wfc(texture_codes):
 
     return trained_WFC_model
 
-def run_wfc_generation(trained_wfc_model):
+def run_wfc_generation(trained_wfc_model, width_height):
 
     wrapping = False
-    level_height = 32
-    level_width = 32
+    level_height = width_height[1]
+    level_width = width_height[0]
 
     new_texture_codes = generate_new_level(level_height, level_width, trained_wfc_model,
                                wrapping=wrapping, max_attempts=20)
@@ -108,7 +108,8 @@ if __name__ == "__main__":
 
     num_new_textures = 1
     NUM_EMBEDDINGS = 16
-    LATENT_DIM = 64
+    LATENT_DIM = 32
+    LATENT_WIDTH_HEIGHT = (64, 64)
 
     texture_path, vqvae_path, save_path = __parse_args()
 
@@ -133,15 +134,13 @@ if __name__ == "__main__":
     print("Training WFC...")
     texture_wfc = train_texture_wfc(texture_codes)
 
-
-
     for idx in range(num_new_textures):
         print("...WFC trained, generating...")
-        new_texture_codes = run_wfc_generation(texture_wfc)
+        new_texture_codes = run_wfc_generation(texture_wfc, LATENT_WIDTH_HEIGHT)
         print("Codes generated, decoding...")
         # Last parameter is the embedding size, it should match the VQVAE embedding size
         new_texture = run_decoder(new_texture_codes, num_new_textures, model, num_embeddings=NUM_EMBEDDINGS,
-                                   encoding_shape=(32, 32, LATENT_DIM))
+                                   encoding_shape=(LATENT_WIDTH_HEIGHT[0], LATENT_WIDTH_HEIGHT[1], LATENT_DIM))
 
         # if num_new_textures == 1:
         #     # To match the shape when num_new_textures > 1
