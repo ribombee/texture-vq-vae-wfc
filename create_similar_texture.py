@@ -7,6 +7,7 @@ import numpy as np
 from util import plot_results
 from WFC_train import extract_patterns, compute_pattern_occurrences, get_unique_patterns, compute_adjacencies
 from WFC_generate import generate_new_level
+import uuid
 
 
 def load_texture(texture_path):
@@ -133,6 +134,7 @@ if __name__ == "__main__":
     texture_codes = get_texture_codes(normalized_texture, model)
     print("Training WFC...")
     texture_wfc = train_texture_wfc(texture_codes)
+    filename = str(uuid.uuid4())
 
     for idx in range(num_new_textures):
         print("...WFC trained, generating...")
@@ -147,7 +149,7 @@ if __name__ == "__main__":
         #     new_textures = [new_texture]
         #     new_texture_codes = [new_texture_codes]
 
-        img_save_path = save_path / f'texture_{idx}.png'
+        img_save_path = save_path / f'texture_{filename}_{idx}.png'
         plot_results(texture, new_texture_codes, new_texture[0][0], img_save_path)
 
     print("Enjoy!")
