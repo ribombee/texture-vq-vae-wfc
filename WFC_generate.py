@@ -17,52 +17,73 @@ def generate_new_level(height, width, model, wrapping=False, max_attempts = 5, i
 	domain = model["domain"]
 
 	i=0
-	center = None
 	iteration_width_square_step = height ** 2 / iteration_levels
 	iteration_height_square_step = height ** 2 / iteration_levels
-	iteration_width = 0
-	iteration_height = 0 # Initialing height and width to be added to in steps.
+
 	while i < max_attempts:
+		center = None
+		float_iteration_width = 0
+		float_iteration_height = 0  # Initialing height and width to be added to in steps.
 		for iteration_idx in range(iteration_levels):
-			if iteration_idx == iteration_levels - 1: # We are making the final generation, which must match the original width and height
-				iteration_width = width
-				iteration_height = height
-			else:
-				iteration_width = int(math.sqrt(iteration_width**2 + iteration_width_square_step))
-				iteration_height = int(math.sqrt(iteration_height**2 + iteration_height_square_step))
-			start_time = time.time()
-			print(f"Generating {iteration_width}x{iteration_height} pattern")
-			level = initialize_level(iteration_height, iteration_width, possible_patterns, center)
-			level = propagate(level, possible_patterns, allowed_adjacencies,
-							  pattern_occurrences, wrapping) # Level must now be immediately propagated due to the insertion of observed pattern.
-
-			possible_positions = get_observable_positions(level, pattern_occurrences)
-
-			while len(possible_positions) > 0:
-				pos, pat = observe(level, pattern_occurrences, possible_positions)
-
-				level[pos[0]][pos[1]] = [pat]
-
-
+			j = 0
+			increment_width = True
+			# If we fail to create something around the new center, give it up to max_attempts tries.
+			while j < max_attempts:
+				if increment_width:
+					if iteration_idx == iteration_levels - 1: # We are making the final generation, which must match the original width and height
+						iteration_width = width
+						iteration_height = height
+					else:
+						float_iteration_width = math.sqrt(float_iteration_width**2 + iteration_width_square_step)
+						float_iteration_height = math.sqrt(float_iteration_height**2 + iteration_height_square_step)
+						iteration_width = int(float_iteration_width)
+						iteration_height = int(float_iteration_height)
+				start_time = time.time()
+				print(f"Generating {iteration_width}x{iteration_height} pattern")
+				level = initialize_level(iteration_height, iteration_width, possible_patterns, center)
 				level = propagate(level, possible_patterns, allowed_adjacencies,
-													pattern_occurrences, wrapping)
+								  pattern_occurrences, wrapping) # Level must now be immediately propagated due to the insertion of observed pattern.
 
 				possible_positions = get_observable_positions(level, pattern_occurrences)
 
-				print(".", end = " ") #Printing a line of dots as we progress to show the runtime
+				while len(possible_positions) > 0:
+					pos, pat = observe(level, pattern_occurrences, possible_positions)
 
-			end_time = time.time()
-			time_elapsed = end_time - start_time
-			print("") # Getting newline for the following print
-			print(f"Generating {iteration_width}x{iteration_height} pattern took {time_elapsed} seconds")
+					level[pos[0]][pos[1]] = [pat]
 
-			if not is_valid_level(level):
-				print(f"Contradiction reached during sampling. A position in the level "+
-					f"has 0 possible patterns. Generation attempt {i} failed.")
-				i+=1
+
+					level = propagate(level, possible_patterns, allowed_adjacencies,
+														pattern_occurrences, wrapping)
+
+					possible_positions = get_observable_positions(level, pattern_occurrences)
+
+					print(".", end = " ") #Printing a line of dots as we progress to show the runtime
+
+				end_time = time.time()
+				time_elapsed = end_time - start_time
+				print("") # Getting newline for the following print
+				print(f"Generating {iteration_width}x{iteration_height} pattern took {time_elapsed} seconds")
+
+				if not is_valid_level(level):
+					print(f"Contradiction reached during sampling. A position in the level has 0 possible patterns. Generation attempt {i},{j} failed.")
+					j += 1
+					increment_width = False
+				else:
+					center = level
+					increment_width = True
+					break # Come out of the inner attempt loop
+
+			if not increment_width:
+				# In this case,we have failed to generate the next size up max_attempts times, and should start over from scratch!
 				break
-			else:
-				center = level
+
+		if not is_valid_level(level):
+			print(f"Contradiction reached during sampling. A position in the level " +
+				  f"has 0 possible patterns. Generation attempt {i},{j} failed.")
+			i += 1
+		else:
+			break  # Come out of the outer attempt loop
+
 
 	return finalize_level(level)
 
@@ -72,7 +93,7 @@ def initialize_level(height, width, possible_patterns, center = None):
 									for row in range(height)]
 
 	if center is not None:
-		print(f"Inserting center: {center}")
+		#print(f"Inserting center: {center}")
 		#Insert a pre-generated level/pattern where there
 		center_height = len(center)
 		center_width = len(center[0])

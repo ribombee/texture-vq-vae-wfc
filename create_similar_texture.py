@@ -4,17 +4,22 @@ import cv2 as cv
 import tensorflow.keras as keras
 import tensorflow as tf
 import numpy as np
-from util import plot_results
+from util import plot_results1
 from WFC_train import extract_patterns, compute_pattern_occurrences, get_unique_patterns, compute_adjacencies
 from WFC_generate import generate_new_level
 import uuid
 
 
 def load_texture(texture_path):
-    texture = cv.imread(str(texture_path))
-    texture = cv.cvtColor(texture, cv.COLOR_BGR2HSV)
+    img = tf.io.read_file(texture_path)
+    img = tf.io.decode_image(img, channels=3, dtype=tf.dtypes.float32).numpy()
+    texture = img/255
+    texture = tf.image.rgb_to_hsv(texture)
+    
+    #texture = cv.imread(str(texture_path))
+    #texture = cv.cvtColor(texture, cv.COLOR_BGR2HSV)
 
-    return texture
+    return img,texture
 
 def get_texture_codes(texture, vqvae):
     encoder = vqvae.get_layer("encoder")
@@ -67,7 +72,7 @@ def run_wfc_generation(trained_wfc_model, width_height, iteration_levels = 2):
     level_width = width_height[0]
 
     new_texture_codes = generate_new_level(level_height, level_width, trained_wfc_model,
-                               wrapping=wrapping, max_attempts=20, iteration_levels = iteration_levels)
+                               wrapping=wrapping, max_attempts=5, iteration_levels = iteration_levels)
 
     return new_texture_codes
 
@@ -84,8 +89,9 @@ def __parse_args():
     parser.add_argument("--save_loc")
 
     args = parser.parse_args()
+    #print(args.texture_loc, type(args.texture_loc))
 
-    return Path(args.texture_loc), Path(args.vqvae_loc), Path(args.save_loc)
+    return args.texture_loc, Path(args.vqvae_loc), Path(args.save_loc)
 
 def run_decoder(texture_codes, num_new_patterns, vqvae, num_embeddings, encoding_shape):
 
@@ -111,7 +117,7 @@ if __name__ == "__main__":
     NUM_EMBEDDINGS = 16
     LATENT_DIM = 32
     LATENT_WIDTH_HEIGHT = (64, 64)
-    ITERATION_LEVELS = 8
+    ITERATION_LEVELS = 5
     WINDOW_SIZE = 2
 
     texture_path, vqvae_path, save_path = __parse_args()
@@ -121,17 +127,17 @@ if __name__ == "__main__":
 
     # This code chunk was used to debug the vq-vae and should be moved to its own file if useful.
 
-    all_texture_paths = texture_path.glob('*')
+    #all_texture_paths = texture_path.glob('*')
+    
+    texture, normalized_texture = load_texture(texture_path)
 
-    texture = load_texture(texture_path)
+    #hue, sat, val = cv.split(texture)
+    #hue = hue / 179
+    #sat = sat / 255
+    #val = val / 255
 
-    hue, sat, val = cv.split(texture)
-    hue = hue / 179
-    sat = sat / 255
-    val = val / 255
-
-    normalized_texture = np.stack([hue, sat, val])
-    normalized_texture = np.transpose(normalized_texture, (1, 2, 0))
+    #normalized_texture = np.stack([hue, sat, val])
+    #normalized_texture = np.transpose(normalized_texture, (1, 2, 0))
 
     texture_codes = get_texture_codes(normalized_texture, model)
     print("Training WFC...")
@@ -151,7 +157,9 @@ if __name__ == "__main__":
         #     new_textures = [new_texture]
         #     new_texture_codes = [new_texture_codes]
 
+        gen_texture = new_texture[0][0]
+        gen_texture = tf.image.hsv_to_rgb(gen_texture)
         img_save_path = save_path / f'texture_{filename}_LD{LATENT_DIM}_NE{NUM_EMBEDDINGS}_WS{WINDOW_SIZE}_{idx}.png'
-        plot_results(texture, new_texture_codes, new_texture[0][0], img_save_path)
+        plot_results1(tf.keras.preprocessing.image.array_to_img(texture), new_texture_codes, tf.keras.preprocessing.image.array_to_img(gen_texture), img_save_path)
 
     print("Enjoy!")
