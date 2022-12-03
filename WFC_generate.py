@@ -5,9 +5,10 @@ import random
 import math
 import pickle
 import numpy as np
+import time
 #from sty import fg, bg, ef, rs, Style, RgbFg
 
-def generate_new_level(height, width, model, wrapping=False, max_attempts = 5):
+def generate_new_level(height, width, model, wrapping=False, max_attempts = 5, iteration_levels = 1):
 	
 	pattern_occurrences = model["pattern_counts"]
 	possible_patterns = list(pattern_occurrences.keys())
@@ -16,35 +17,72 @@ def generate_new_level(height, width, model, wrapping=False, max_attempts = 5):
 	domain = model["domain"]
 
 	i=0
+	center = None
+	iteration_width_square_step = height ** 2 / iteration_levels
+	iteration_height_square_step = height ** 2 / iteration_levels
+	iteration_width = 0
+	iteration_height = 0 # Initialing height and width to be added to in steps.
 	while i < max_attempts:
-		level = initialize_level(height, width, possible_patterns)
-
-		possible_positions = get_observable_positions(level, pattern_occurrences)
-		
-		while len(possible_positions) > 0:
-			pos, pat = observe(level, pattern_occurrences, possible_positions)
-
-			level[pos[0]][pos[1]] = [pat]
-
-
-			level = propagate(level, possible_patterns, allowed_adjacencies, 
-												pattern_occurrences, wrapping)
+		for iteration_idx in range(iteration_levels):
+			if iteration_idx == iteration_levels - 1: # We are making the final generation, which must match the original width and height
+				iteration_width = width
+				iteration_height = height
+			else:
+				iteration_width = int(math.sqrt(iteration_width**2 + iteration_width_square_step))
+				iteration_height = int(math.sqrt(iteration_height**2 + iteration_height_square_step))
+			start_time = time.time()
+			print(f"Generating {iteration_width}x{iteration_height} pattern")
+			level = initialize_level(iteration_height, iteration_width, possible_patterns, center)
+			level = propagate(level, possible_patterns, allowed_adjacencies,
+							  pattern_occurrences, wrapping) # Level must now be immediately propagated due to the insertion of observed pattern.
 
 			possible_positions = get_observable_positions(level, pattern_occurrences)
-		
-		if not is_valid_level(level):
-			print(f"Contradiction reached during sampling. A position in the level "+
-				f"has 0 possible patterns. Generation attempt {i} failed.")
-			i+=1
-		else:
-			break
-			
+
+			while len(possible_positions) > 0:
+				pos, pat = observe(level, pattern_occurrences, possible_positions)
+
+				level[pos[0]][pos[1]] = [pat]
+
+
+				level = propagate(level, possible_patterns, allowed_adjacencies,
+													pattern_occurrences, wrapping)
+
+				possible_positions = get_observable_positions(level, pattern_occurrences)
+
+				print(".", end = " ") #Printing a line of dots as we progress to show the runtime
+
+			end_time = time.time()
+			time_elapsed = end_time - start_time
+			print("") # Getting newline for the following print
+			print(f"Generating {iteration_width}x{iteration_height} pattern took {time_elapsed} seconds")
+
+			if not is_valid_level(level):
+				print(f"Contradiction reached during sampling. A position in the level "+
+					f"has 0 possible patterns. Generation attempt {i} failed.")
+				i+=1
+				break
+			else:
+				center = level
+
 	return finalize_level(level)
 
-def initialize_level(height, width, possible_patterns):
+def initialize_level(height, width, possible_patterns, center = None):
 
 	level = [[possible_patterns for column in range(width)]
 									for row in range(height)]
+
+	if center is not None:
+		print(f"Inserting center: {center}")
+		#Insert a pre-generated level/pattern where there
+		center_height = len(center)
+		center_width = len(center[0])
+
+		center_height_offset = (height - center_height) //2
+		center_width_offset = (width - center_width) // 2
+		for row in range(center_height):
+			for column in range(center_width):
+				level[center_width_offset + row][center_height_offset + column] = center[row][column]
+				#level[center_height_offset: center_height_offset + center_height][center_width_offset: center_width_offset + center_width] = center
 
 	return level
 
@@ -274,6 +312,7 @@ if __name__ == '__main__':
 		level_width = 32
 
 	trained_model = pickle.load(open(f"trained_WFC_"+textureLocation[9:-4]+".pickle", "rb"))
+
 
 	level = generate_new_level(level_height, level_width, trained_model, 
 											wrapping=wrapping, max_attempts=20)
