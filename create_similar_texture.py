@@ -8,6 +8,7 @@ from util import plot_results1, normalize_and_hsv_image
 from WFC_train import extract_patterns, compute_pattern_occurrences, get_unique_patterns, compute_adjacencies
 from WFC_generate import generate_new_level
 import uuid
+import pickle
 
 
 def load_texture(texture_path):
@@ -75,6 +76,14 @@ def load_model(vqvae_path):
     vqvae = keras.models.load_model(vqvae_path, custom_objects={"VectorQuantizer": VectorQuantizer})
 
     return vqvae
+def save_WFC(WFC_Variable):
+    with open('codeGenerated.pickle', 'wb') as f:
+            pickle.dump(WFC_Variable, f)
+
+def load_WFC():
+    with open('codeGenerated.pickle', 'rb') as file:
+                new_texture_codes = pickle.load(file)
+    return new_texture_codes
 
 def __parse_args():
     from argparse import ArgumentParser
@@ -116,6 +125,7 @@ if __name__ == "__main__":
     ITERATION_LEVELS = 8
     WINDOW_SIZE = 2
     WRAPPING = True
+    MODEL_SAVED = False
 
     texture_path, vqvae_path, save_path = __parse_args()
 
@@ -134,7 +144,13 @@ if __name__ == "__main__":
 
     for idx in range(num_new_textures):
         print("...WFC trained, generating...")
-        new_texture_codes = run_wfc_generation(texture_wfc, LATENT_WIDTH_HEIGHT, iteration_levels=ITERATION_LEVELS, wrapping=WRAPPING)
+
+        if(not MODEL_SAVED):
+            new_texture_codes = run_wfc_generation(texture_wfc, LATENT_WIDTH_HEIGHT, iteration_levels=ITERATION_LEVELS)
+            save_WFC(new_texture_codes)
+        else:
+            new_texture_codes = load_WFC()
+
         print("Codes generated, decoding...")
         # Last parameter is the embedding size, it should match the VQVAE embedding size
         new_texture = run_decoder(new_texture_codes, num_new_textures, model, num_embeddings=NUM_EMBEDDINGS,
