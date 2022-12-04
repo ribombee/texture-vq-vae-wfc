@@ -33,12 +33,11 @@ def get_texture_codes(texture, vqvae):
     return code_indices
 
 
-def train_texture_wfc(texture_codes):
+def train_texture_wfc(texture_codes, window_size):
 
     wrapping = False
-    pattern_height = 3
-    pattern_width = 3
-    print(pattern_height)
+    pattern_height = window_size
+    pattern_width = window_size
     row_offset = 1
     col_offset = 1
 
@@ -66,14 +65,14 @@ def train_texture_wfc(texture_codes):
 
     return trained_WFC_model
 
-def run_wfc_generation(trained_wfc_model, width_height):
+def run_wfc_generation(trained_wfc_model, width_height, iteration_levels = 2):
 
     wrapping = False
     level_height = width_height[1]
     level_width = width_height[0]
 
     new_texture_codes = generate_new_level(level_height, level_width, trained_wfc_model,
-                               wrapping=wrapping, max_attempts=20)
+                               wrapping=wrapping, max_attempts=5, iteration_levels = iteration_levels)
 
     return new_texture_codes
 
@@ -81,6 +80,14 @@ def load_model(vqvae_path):
     vqvae = keras.models.load_model(vqvae_path, custom_objects={"VectorQuantizer": VectorQuantizer})
 
     return vqvae
+def save_WFC(WFC_Variable):
+    with open('codeGenerated.pickle', 'wb') as f:
+            pickle.dump(WFC_Variable, f)
+
+def load_WFC():
+    with open('codeGenerated.pickle', 'rb') as file:
+                new_texture_codes = pickle.load(file)
+    return new_texture_codes
 
 def __parse_args():
     from argparse import ArgumentParser
@@ -118,6 +125,9 @@ if __name__ == "__main__":
     NUM_EMBEDDINGS = 16
     LATENT_DIM = 32
     LATENT_WIDTH_HEIGHT = (64, 64)
+    ITERATION_LEVELS = 5
+    WINDOW_SIZE = 2
+    MODEL_SAVED = False
 
     texture_path, vqvae_path, save_path = __parse_args()
 
@@ -140,12 +150,16 @@ if __name__ == "__main__":
 
     texture_codes = get_texture_codes(normalized_texture, model)
     print("Training WFC...")
-    texture_wfc = train_texture_wfc(texture_codes)
+    texture_wfc = train_texture_wfc(texture_codes, WINDOW_SIZE)
     filename = str(uuid.uuid4())
 
     for idx in range(num_new_textures):
         print("...WFC trained, generating...")
-        new_texture_codes = run_wfc_generation(texture_wfc, LATENT_WIDTH_HEIGHT)
+        if(not MODEL_SAVED):
+            new_texture_codes = run_wfc_generation(texture_wfc, LATENT_WIDTH_HEIGHT, iteration_levels=ITERATION_LEVELS)
+            save_WFC(new_texture_codes)
+        else:
+            new_texture_codes = load_WFC()
         print("Codes generated, decoding...")
         # Last parameter is the embedding size, it should match the VQVAE embedding size
         new_texture = run_decoder(new_texture_codes, num_new_textures, model, num_embeddings=NUM_EMBEDDINGS,
@@ -155,9 +169,10 @@ if __name__ == "__main__":
         #     # To match the shape when num_new_textures > 1
         #     new_textures = [new_texture]
         #     new_texture_codes = [new_texture_codes]
+
         gen_texture = new_texture[0][0]
         gen_texture = tf.image.hsv_to_rgb(gen_texture)
-        img_save_path = save_path / f'texture_{filename}_{idx}.png'
+        img_save_path = save_path / f'texture_{filename}_LD{LATENT_DIM}_NE{NUM_EMBEDDINGS}_WS{WINDOW_SIZE}_{idx}.png'
         plot_results1(tf.keras.preprocessing.image.array_to_img(texture), new_texture_codes, tf.keras.preprocessing.image.array_to_img(gen_texture), img_save_path)
 
     print("Enjoy!")
