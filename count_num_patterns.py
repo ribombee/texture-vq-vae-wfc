@@ -1,10 +1,9 @@
 import os
 from tqdm import tqdm
 from pathlib import Path
-import cv2 as cv
 import numpy as np
-from WFC_train import extract_patterns, compute_pattern_occurrences, get_unique_patterns, compute_adjacencies
-from create_similar_texture import load_model, load_texture, get_texture_codes
+from WFC_train import extract_patterns, get_unique_patterns
+from create_similar_texture import load_model, load_texture
 import pickle
 
 import threading
@@ -24,6 +23,7 @@ def train_texture_wfc(texture_codes) -> tuple[int,int,int]:
     unique_patterns = get_unique_patterns(all_patterns)
 
     return len(unique_patterns)
+
 
 class TextureThread(threading.Thread):
     def __init__(self, threadId:int, num_patterns_per_dim:dict, lock:threading.Lock, model_tuple:tuple, encoder, quantizer, base_texture_path:str, texture_paths:list, start_texture_index:int, end_texture_index:int):
@@ -59,6 +59,7 @@ class TextureThread(threading.Thread):
         self.num_patterns_per_dim[self.model_tuple] += values
         self.lock.release()
         print(f"FINISHED THREAD WITH ID={self.threadId} !")
+
 
 if __name__ == '__main__':
     num_patterns_per_dim = {}
