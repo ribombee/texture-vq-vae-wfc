@@ -3,7 +3,6 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 
-from tensorflow import keras
 import tensorflow_probability as tfp
 import tensorflow_datasets as tfds
 import tensorflow as tf
@@ -11,35 +10,10 @@ import cv2 as cv
 from datetime import datetime
 from pathlib import Path
 from model import *
-from util import plot_results, plot_results1, hsv_cv_to_tf, hsv_tf_to_cv
+from util import plot_results, plot_results1, hsv_cv_to_tf, hsv_tf_to_cv, get_image_processor, denormalize_and_rgb_image
 
 #Set random seed for reproducability
-tf.keras.utils.set_random_seed(42)
-
-def get_image_processor(image_size, augment=False):
-
-    data_augmentation = keras.Sequential([
-        keras.layers.RandomFlip("horizontal_and_vertical"),
-        keras.layers.RandomBrightness(0.2),
-        keras.layers.RandomContrast(0.2),
-        keras.layers.RandomRotation(0.2),
-        keras.layers.RandomZoom(0.2, 0.2),
-        keras.layers.RandomCrop(image_size[0], image_size[1])]
-    )
-
-    def process_image(image):
-        if augment:
-            if np.random.rand() > 0.7:
-                image = data_augmentation(image)
-
-        image = tf.image.resize_with_crop_or_pad(image, image_size[0], image_size[1])
-
-        image = image / 255 # Normalize
-        image = tf.image.rgb_to_hsv(image) # Swap to hsv
-
-        return image
-
-    return process_image
+tf.keras.utils.set_random_seed(69)
 
 def load_dtd_dataset(image_size, batch_size):
     train_ds, val_ds, test_ds = tfds.load('dtd', split=['train', 'validation', 'test'], shuffle_files=True)
@@ -78,7 +52,7 @@ if __name__ == "__main__":
     IMAGE_SIZE = (64, 64)   # To match DOOM texture size
     EPOCHS = 500
     LATENT_DIM = 32
-    NUM_EMBEDDINGS = 16
+    NUM_EMBEDDINGS = 32
     # How much smaller the latent representation should be. Scaled as a multiple of 2^(-LATENT_SHRINK_SCALE)
     LATENT_SHRINK_SCALE = 0
 
@@ -145,16 +119,16 @@ if __name__ == "__main__":
     if not img_save_path.exists():
         img_save_path.mkdir()
 
+
     for idx in range(input_batch.shape[0]):
 
-        #input_sprite = hsv_tf_to_cv(input_batch[idx])
-        #output_sprite = hsv_tf_to_cv(output_batch[idx])
-
-        input_sprite = tf.image.hsv_to_rgb(input_batch[idx])
-        output_sprite = tf.image.hsv_to_rgb(output_batch[idx])
+        input_sprite = denormalize_and_rgb_image(input_batch[idx])
+        output_sprite = denormalize_and_rgb_image(output_batch[idx])
 
         #plot_results(input_sprite, code_batch_indices[idx], output_batch[idx], img_save_path / f'{idx}.png', NUM_EMBEDDINGS)
         plot_results1(tf.keras.preprocessing.image.array_to_img(input_sprite), code_batch_indices[idx], tf.keras.preprocessing.image.array_to_img(output_sprite), img_save_path / f'{idx}.png', NUM_EMBEDDINGS)
+
+    print(quantizer.embeddings)
 
     if TEST_ON_DOOM:
         for sprite_path in doom_sprite_paths:

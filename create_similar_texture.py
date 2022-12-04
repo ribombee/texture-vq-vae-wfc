@@ -4,7 +4,7 @@ import cv2 as cv
 import tensorflow.keras as keras
 import tensorflow as tf
 import numpy as np
-from util import plot_results1
+from util import plot_results1, normalize_and_hsv_image
 from WFC_train import extract_patterns, compute_pattern_occurrences, get_unique_patterns, compute_adjacencies
 from WFC_generate import generate_new_level
 import uuid
@@ -13,11 +13,7 @@ import uuid
 def load_texture(texture_path):
     img = tf.io.read_file(texture_path)
     img = tf.io.decode_image(img, channels=3, dtype=tf.dtypes.float32).numpy()
-    texture = img/255
-    texture = tf.image.rgb_to_hsv(texture)
-    
-    #texture = cv.imread(str(texture_path))
-    #texture = cv.cvtColor(texture, cv.COLOR_BGR2HSV)
+    texture = tf.image.rgb_to_hsv(img)
 
     return img,texture
 
@@ -99,12 +95,13 @@ def run_decoder(texture_codes, num_new_patterns, vqvae, num_embeddings, encoding
     new_textures = []
     for idx in range(num_new_patterns):
         pretrained_embeddings = quantizer.embeddings
-        # Calling .numpy() on this otherwise matmul won't take it
-        codes_onehot = tf.one_hot(texture_codes, num_embeddings).numpy()
-        quantized = tf.matmul(
-            codes_onehot.astype("float32"), pretrained_embeddings, transpose_b=True
-        ) # This puts the appropriate encoding vector corresponding to the id that has been one-hot encoded
+        # Convert the code indices to one-hot encoded vectors
+        codes_onehot = tf.one_hot(texture_codes[idx], num_embeddings, axis=-1)
+        # Use the one-hot encoded vectors to index into the pretrained embeddings
+        quantized = tf.matmul(codes_onehot, pretrained_embeddings, transpose_b=True)
+        # Reshape the quantized vectors to the correct shape
         quantized = tf.reshape(quantized, (-1, *(encoding_shape)))
+        # Run the decoder on the quantized vectors to generate the new texture
         new_texture = decoder.predict(quantized)
         new_textures.append(new_texture)
 
@@ -113,7 +110,7 @@ def run_decoder(texture_codes, num_new_patterns, vqvae, num_embeddings, encoding
 if __name__ == "__main__":
 
     num_new_textures = 1
-    NUM_EMBEDDINGS = 16
+    NUM_EMBEDDINGS = 32
     LATENT_DIM = 32
     LATENT_WIDTH_HEIGHT = (64, 64)
     ITERATION_LEVELS = 8
@@ -127,17 +124,8 @@ if __name__ == "__main__":
 
     # This code chunk was used to debug the vq-vae and should be moved to its own file if useful.
 
-    #all_texture_paths = texture_path.glob('*')
-    
     texture, normalized_texture = load_texture(texture_path)
 
-    #hue, sat, val = cv.split(texture)
-    #hue = hue / 179
-    #sat = sat / 255
-    #val = val / 255
-
-    #normalized_texture = np.stack([hue, sat, val])
-    #normalized_texture = np.transpose(normalized_texture, (1, 2, 0))
 
     texture_codes = get_texture_codes(normalized_texture, model)
     print("Training WFC...")

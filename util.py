@@ -2,18 +2,46 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import cv2 as cv
 import numpy as np
+from tensorflow import keras
 
-def get_image_processor(image_size):
+def normalize_and_hsv_image(image):
+    image = image / 255  # Normalize
+    image = tf.image.rgb_to_hsv(image)  # Swap to hsv
+
+    return image
+
+def denormalize_and_rgb_image(image):
+
+    # Convert the image tensor back to RGB
+    image = tf.image.hsv_to_rgb(image)
+
+    #Denormalize
+    image = image * 255
+
+    return image
+
+def get_image_processor(image_size, augment=False):
+
+    data_augmentation = keras.Sequential([
+        keras.layers.RandomFlip("horizontal_and_vertical"),
+        keras.layers.RandomBrightness(0.2),
+        keras.layers.RandomContrast(0.2),
+        keras.layers.RandomRotation(0.2),
+        keras.layers.RandomZoom(0.2, 0.2),
+        keras.layers.RandomCrop(image_size[0], image_size[1])]
+    )
 
     def process_image(image):
+        if augment:
+            if np.random.rand() > 0.7:
+                image = data_augmentation(image)
+
         image = tf.image.resize_with_crop_or_pad(image, image_size[0], image_size[1])
-
-        image = image / 255 # Normalize
-        image = tf.image.rgb_to_hsv(image) # Swap to hsv
-
+        image = normalize_and_hsv_image(image)
         return image
 
     return process_image
+
 
 
 def hsv_tf_to_cv(image):
@@ -71,8 +99,6 @@ def plot_results1(original, codes, reconstruction, img_save_path, codebook_size=
 
     plt.subplot(1, 3, 2)
     plt.imshow(codes, vmin= 0, vmax = codebook_size)
-    # TODO: make this plot bigger or something to let annot=True fit in the plot nicely
-    # sns.heatmap(codes, vmin=0, vmax=codebook_size)
     plt.title("Codes")
     plt.axis("Off")
 
