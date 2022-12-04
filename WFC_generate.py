@@ -87,22 +87,22 @@ def generate_new_level(height, width, model, wrapping=False, max_attempts = 5, i
 
 	return finalize_level(level)
 
-def initialize_level(height, width, possible_patterns, center = None):
+def initialize_level(height, width, possible_patterns, precomputed = None):
 
 	level = [[possible_patterns for column in range(width)]
 									for row in range(height)]
 
-	if center is not None:
+	if precomputed is not None:
 		#print(f"Inserting center: {center}")
 		#Insert a pre-generated level/pattern where there
-		center_height = len(center)
-		center_width = len(center[0])
+		precomputed_height = len(precomputed)
+		precomputed_width = len(precomputed[0])
 
-		center_height_offset = (height - center_height) //2
-		center_width_offset = (width - center_width) // 2
-		for row in range(center_height):
-			for column in range(center_width):
-				level[center_width_offset + row][center_height_offset + column] = center[row][column]
+		precomputed_height_offset = 0 #(height - precomputed_height) //2
+		precomputed_width_offset = 0 #(width - precomputed_width) // 2
+		for row in range(precomputed_height):
+			for column in range(precomputed_width):
+				level[precomputed_width_offset + row][precomputed_height_offset + column] = precomputed[row][column]
 				#level[center_height_offset: center_height_offset + center_height][center_width_offset: center_width_offset + center_width] = center
 
 	return level
