@@ -76,13 +76,13 @@ def load_model(vqvae_path):
     vqvae = keras.models.load_model(vqvae_path, custom_objects={"VectorQuantizer": VectorQuantizer})
 
     return vqvae
-def save_WFC(WFC_Variable):
-    with open('codeGenerated.pickle', 'wb') as f:
-            pickle.dump(WFC_Variable, f)
+def save_WFC(WFC_Variable, save_path):
+    with open(str(save_path), 'wb') as f:
+        pickle.dump(WFC_Variable, f)
 
-def load_WFC():
-    with open('codeGenerated.pickle', 'rb') as file:
-                new_texture_codes = pickle.load(file)
+def load_WFC(save_path):
+    with open(str(save_path), 'rb') as file:
+        new_texture_codes = pickle.load(file)
     return new_texture_codes
 
 def __parse_args():
@@ -93,9 +93,8 @@ def __parse_args():
     parser.add_argument("--save_loc")
 
     args = parser.parse_args()
-    #print(args.texture_loc, type(args.texture_loc))
 
-    return args.texture_loc, Path(args.vqvae_loc), Path(args.save_loc)
+    return Path(args.texture_loc), Path(args.vqvae_loc), Path(args.save_loc)
 
 def run_decoder(texture_codes, vqvae, num_embeddings, encoding_shape):
 
@@ -115,7 +114,7 @@ def run_decoder(texture_codes, vqvae, num_embeddings, encoding_shape):
 
 if __name__ == "__main__":
 
-    num_new_textures = 1
+    num_new_textures = 3
     NUM_EMBEDDINGS = 32
     LATENT_DIM = 32
     LATENT_WIDTH_HEIGHT = (64, 64)
@@ -131,8 +130,7 @@ if __name__ == "__main__":
 
     # This code chunk was used to debug the vq-vae and should be moved to its own file if useful.
 
-    texture, normalized_texture = load_texture(texture_path)
-
+    texture, normalized_texture = load_texture(str(texture_path))
 
     texture_codes = get_texture_codes(normalized_texture, model)
     print("Training WFC...")
@@ -140,13 +138,15 @@ if __name__ == "__main__":
     filename = str(uuid.uuid4())
 
     for idx in range(num_new_textures):
-        print("...WFC trained, generating...")
+        print(f"Generating new texture number {idx + 1}...")
+
+        codes_save_loc = save_path / f'{texture_path.stem}_generated_codes_{idx}.pickle'
 
         if(not MODEL_SAVED):
             new_texture_codes = run_wfc_generation(texture_wfc, LATENT_WIDTH_HEIGHT, iteration_levels=ITERATION_LEVELS)
-            save_WFC(new_texture_codes)
+            save_WFC(new_texture_codes, codes_save_loc)
         else:
-            new_texture_codes = load_WFC()
+            new_texture_codes = load_WFC(codes_save_loc)
 
         print("Codes generated, decoding...")
         # Last parameter is the embedding size, it should match the VQVAE embedding size
