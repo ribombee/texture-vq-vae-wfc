@@ -97,24 +97,21 @@ def __parse_args():
 
     return args.texture_loc, Path(args.vqvae_loc), Path(args.save_loc)
 
-def run_decoder(texture_codes, num_new_patterns, vqvae, num_embeddings, encoding_shape):
+def run_decoder(texture_codes, vqvae, num_embeddings, encoding_shape):
 
     quantizer = vqvae.get_layer("vector_quantizer")
     decoder = vqvae.get_layer("decoder")
-    new_textures = []
-    for idx in range(num_new_patterns):
-        pretrained_embeddings = quantizer.embeddings
-        # Convert the code indices to one-hot encoded vectors
-        codes_onehot = tf.one_hot(texture_codes[idx], num_embeddings, axis=-1)
-        # Use the one-hot encoded vectors to index into the pretrained embeddings
-        quantized = tf.matmul(codes_onehot, pretrained_embeddings, transpose_b=True)
-        # Reshape the quantized vectors to the correct shape
-        quantized = tf.reshape(quantized, (-1, *(encoding_shape)))
-        # Run the decoder on the quantized vectors to generate the new texture
-        new_texture = decoder.predict(quantized)
-        new_textures.append(new_texture)
+    pretrained_embeddings = quantizer.embeddings
+    # Convert the code indices to one-hot encoded vectors
+    codes_onehot = tf.one_hot(texture_codes, num_embeddings, axis=-1)
+    # Use the one-hot encoded vectors to index into the pretrained embeddings
+    quantized = tf.matmul(codes_onehot, pretrained_embeddings, transpose_b=True)
+    # Reshape the quantized vectors to the correct shape
+    quantized = tf.reshape(quantized, (-1, *(encoding_shape)))
+    # Run the decoder on the quantized vectors to generate the new texture
+    new_texture = decoder.predict(quantized)
 
-    return new_textures
+    return new_texture
 
 if __name__ == "__main__":
 
@@ -153,15 +150,10 @@ if __name__ == "__main__":
 
         print("Codes generated, decoding...")
         # Last parameter is the embedding size, it should match the VQVAE embedding size
-        new_texture = run_decoder(new_texture_codes, num_new_textures, model, num_embeddings=NUM_EMBEDDINGS,
+        new_texture = run_decoder(new_texture_codes, model, num_embeddings=NUM_EMBEDDINGS,
                                    encoding_shape=(LATENT_WIDTH_HEIGHT[0], LATENT_WIDTH_HEIGHT[1], LATENT_DIM))
 
-        # if num_new_textures == 1:
-        #     # To match the shape when num_new_textures > 1
-        #     new_textures = [new_texture]
-        #     new_texture_codes = [new_texture_codes]
-
-        gen_texture = new_texture[0][0]
+        gen_texture = new_texture[0]
         gen_texture = tf.image.hsv_to_rgb(gen_texture)
         img_save_path = save_path / f'texture_{filename}_LD{LATENT_DIM}_NE{NUM_EMBEDDINGS}_WS{WINDOW_SIZE}_{idx}.png'
         plot_results1(tf.keras.preprocessing.image.array_to_img(texture), new_texture_codes, tf.keras.preprocessing.image.array_to_img(gen_texture), img_save_path)
