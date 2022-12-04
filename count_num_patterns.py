@@ -79,8 +79,8 @@ if __name__ == '__main__':
         NUM_EMBEDDINGS = int(split_folder[1])
         
         # We've already done this:
-        if (LATENT_DIM,NUM_EMBEDDINGS) not in {(64,16),(256,8),(256,16)}:
-            continue
+        # if (LATENT_DIM,NUM_EMBEDDINGS) not in {(64,16),(256,8),(256,16)}:
+        #     continue
         
         print(f"COMPUTING ON MODEL {LATENT_DIM}x{NUM_EMBEDDINGS} ...")
         
@@ -114,15 +114,6 @@ if __name__ == '__main__':
         thread1.start(); thread2.start(); thread3.start(); thread4.start()
         
         threads = [thread1, thread2, thread3, thread4]
-        
-        # Iterate over each texture
-        # for texture_path in tqdm(texture_paths):
-
-        #     texture, normalized_texture = load_texture(f"{BASE_TEXTURE_PATH}\\{texture_path}")
-        #     texture_codes = get_texture_codes(normalized_texture, model)
-        #     t = train_texture_wfc(texture_codes)
-            
-        #     num_patterns_per_dim[(LATENT_DIM,NUM_EMBEDDINGS)].append(t)
         
         for thread in threads:
             thread.join()

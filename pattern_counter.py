@@ -20,8 +20,6 @@ import os
 
 d = pickle.load(open("num_patterns_per_dim_combined.pickle","rb"))
 
-#print(d[(128,16)])
-
 avg = lambda l: sum(l)/len(l)
 
 latent_dims = [16,32,64,128,256,512]
@@ -33,12 +31,9 @@ print()
 print(f"    | {' | '.join(f'{n:>8d}' for n in latent_dims)}")
 print_line()
 for ne in num_embeds:
-    val_strings = [f'{avg(d[(ld,ne)]):>8.3f}' for ld in latent_dims]
+    values = [d[(ld,ne)] if (ld,ne) in d else None for ld in latent_dims]
+    values = [avg(v) if v != None else None for v in values]
+    val_strings = [f'{v:>8.3f}' if v != None else ' '*8 for v in values]
     print(f"{ne:>3d} | {' | '.join(val_strings)}")
     print_line()
 print()
-
-# for k in list(d.keys()):
-#     print(f"Model = {k}, average = ", end='')
-#     average = avg(d[k])
-#     print(f"{average:.3f}")
