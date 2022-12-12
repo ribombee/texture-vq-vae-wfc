@@ -1,6 +1,10 @@
 # texture-vq-vae-wfc
 This repository contains the source code for a research project on generating "similar" textures to existing ones using a neurosymbolic method.
 
+## Acknowledgements
+
+- Much of our VQ-VAE code was based off of the [Kera's tutorial on Vector Quantized-Variational Autoencoders](https://keras.io/examples/generative/vq_vae/) (VQ-VAEs).
+- Our WaveFunctionCollapse code was based on the example code given for the warm-up assignment in CMPUT 652.
 
 ## Run instructions
 
