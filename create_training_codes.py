@@ -6,6 +6,32 @@ import numpy as np
 import tensorflow_datasets as tfds
 from util import get_image_processor
 
+def __parse_args():
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser()
+    parser.add_argument("--vqvae_loc")
+    parser.add_argument("--code_save_loc")
+
+    args = parser.parse_args()
+
+    return Path(args.vqvae_loc), Path(args.code_save_loc)
+
+if __name__ == "__main__":
+
+
+    # Load model
+
+    # Load data
+
+    # Get both b and t latents
+
+    print("This file was never actually useful oopsy")
+    pass
+
+# Below is the old tf-based code
+
+'''
 def load_dtd_dataset(image_size, batch_size):
     train_ds, val_ds, test_ds = tfds.load('dtd', split=['train', 'validation', 'test'], shuffle_files=True)
 
@@ -56,4 +82,5 @@ if __name__ == "__main__":
 
         for texture in code_batch_indices:
             np.save(f'Textures/Texture_{idx}',texture)
-            idx += 1 # so each texture has a different name
+            idx += 1 # so each texture has a different name 
+'''
