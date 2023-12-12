@@ -1,16 +1,192 @@
 from pathlib import Path
-from model import VectorQuantizer
-import cv2 as cv
-import tensorflow.keras as keras
-import tensorflow as tf
 import numpy as np
-from util import plot_results1, normalize_and_hsv_image
 from WFC_train import extract_patterns, compute_pattern_occurrences, get_unique_patterns, compute_adjacencies
 from WFC_generate import generate_new_level
+from model import VQVAE
+import argparse
+from omegaconf import OmegaConf
+import torchvision
+import torch
+from datetime import datetime
 import uuid
 import pickle
 
 
+def load_texture(texture_path, conf):
+
+    img = torchvision.io.read_image(str(texture_path), mode =torchvision.io.ImageReadMode.RGB)
+    # Convert from uint8 to float32
+    img = img.float()
+    img = img.cuda()
+
+    # Normalize to mean 0.5 stdv 0.5 i guess
+    normalizer = torchvision.transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+    resize = torchvision.transforms.Resize(conf.data.size)
+
+    # Add a batch dimension
+    img = img[None, :, :, :]
+
+    img = resize(img)
+    img = normalizer(img)
+    return img
+
+def get_texture_codes(texture_tensor, model):
+
+    quant_t, quant_b, diff, id_t, id_b = model.encode(texture_tensor)
+
+    return quant_t, quant_b, id_t, id_b
+
+def train_texture_wfc(texture_codes, window_size, wrapping):
+
+    wrapping = wrapping
+    pattern_height = window_size
+    pattern_width = window_size
+    row_offset = 1
+    col_offset = 1
+
+    all_patterns = extract_patterns(texture_codes, pattern_height, pattern_width,
+                                    row_offset=row_offset, col_offset=col_offset,
+                                    wrapping=wrapping)
+
+    pattern_occurrences = compute_pattern_occurrences(all_patterns)
+
+    unique_patterns = get_unique_patterns(all_patterns)
+
+    learned_adjacencies = compute_adjacencies(unique_patterns,
+                                              row_offset=row_offset,
+                                              col_offset=col_offset)
+
+    trained_WFC_model = {
+        "domain": "color",  # Hardcoded as color due to the way that the wfc code is set up
+        "pattern_height": pattern_height,
+        "pattern_width": pattern_width,
+        "row_offset": row_offset,
+        "col_offset": col_offset,
+        "allowed_adjacencies": learned_adjacencies,
+        "pattern_counts": pattern_occurrences
+    }
+
+    return trained_WFC_model
+
+def load_model(vqvae_path):
+
+    device = "cuda"
+
+    model = VQVAE(conf=conf).to(device)
+    model.load_state_dict(torch.load(vqvae_path))
+
+    return model
+
+
+def run_wfc_generation(trained_wfc_model, width_height, iteration_levels = 2, wrapping = False):
+
+    level_height = width_height[1]
+    level_width = width_height[0]
+
+    new_texture_codes = generate_new_level(level_height, level_width, trained_wfc_model,
+                               wrapping=wrapping, max_attempts=5, iteration_levels = iteration_levels)
+
+    return new_texture_codes
+
+
+def decode_latents(id_t, id_b, model):
+
+    decoded = model.decode_code(id_t, id_b)
+
+    return decoded
+
+
+def make_folder_structure(output_path):
+
+    time_now = datetime.now().strftime('%m-%d-%H-%M')
+    output_dir = output_path / time_now
+
+    if not output_dir.exists():
+        output_dir.mkdir()
+
+    if not (output_dir / "wfc_sample").exists():
+        (output_dir / "wfc_sample").mkdir()
+
+    return output_dir
+
+def __load_config():
+    conf = OmegaConf.load("config.yaml")
+
+    print(f"loaded configs: {conf}")
+
+    return conf
+
+def __parse_args():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("texture_path", type=str)
+    parser.add_argument("model_path", type=str)
+    parser.add_argument("output_path", type=str)
+
+    args = parser.parse_args()
+
+    print(args)
+
+    return Path(args.texture_path), Path(args.model_path), Path(args.output_path)
+
+
+if __name__ == "__main__":
+
+    # read args and conf
+
+    texture_path, model_path, output_path = __parse_args()
+    output_path = make_folder_structure(output_path)
+    conf = __load_config()
+
+    # Load texture and model
+
+    texture_tensor = load_texture(texture_path, conf)
+    model = load_model(model_path)
+
+    # Get texture codebook idxs
+
+    # TODO: test, are these the right shape?
+    quant_t, quant_b, id_t, id_b = get_texture_codes(texture_tensor, model)
+
+    # Run WFC on texture embedding
+
+    wfc_model_b = train_texture_wfc(texture_codes=id_b.cpu().numpy(), window_size=2, wrapping=False)
+    new_id_b = run_wfc_generation(wfc_model_b, width_height=(32, 32), iteration_levels=2, wrapping=False)
+
+    wfc_model_t = train_texture_wfc(texture_codes=id_t.cpu().numpy(), window_size=2, wrapping=False)
+    new_id_t = run_wfc_generation(wfc_model_t, width_height=(16, 16), iteration_levels=2, wrapping=False)
+
+
+    # Decode new latent
+
+    # use id_t from model directly, use new_id_b for new structure latent.
+    new_id_b = torch.LongTensor(new_id_b).cuda()
+    new_id_t = torch.LongTensor(new_id_t).cuda()
+
+    new_id_b = new_id_b[None, :, :]
+    new_id_t = new_id_t[None, :, :]
+
+
+    new_textures_b = decode_latents(id_t, new_id_b, model)
+    new_textures_t = decode_latents(new_id_t, id_b, model)
+    fully_new_textures = decode_latents(new_id_t, new_id_b, model)
+
+    texture_name = texture_path.name
+    img_output_path = output_path / "wfc_sample"
+    img_output_path = img_output_path / f"{texture_name}.png"
+
+    stacked_image = [texture_tensor, new_textures_b, new_textures_t, fully_new_textures]
+
+    torchvision.utils.save_image(torch.cat(stacked_image, 0), img_output_path, normalize=True)
+    torchvision.utils.save_image(torch.cat([new_textures_b, new_textures_t, fully_new_textures], 0), img_output_path, normalize=True)
+
+
+    # Plot
+
+    pass
+
+# Below is the old tensorflow-based version.
+'''
 def load_texture(texture_path):
     img = tf.io.read_file(texture_path)
     img = tf.io.decode_image(img, channels=3, dtype=tf.dtypes.float32).numpy()
@@ -159,3 +335,6 @@ if __name__ == "__main__":
         plot_results1(tf.keras.preprocessing.image.array_to_img(texture), new_texture_codes, tf.keras.preprocessing.image.array_to_img(gen_texture), img_save_path)
 
     print("Enjoy!")
+    
+'''
+

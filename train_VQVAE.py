@@ -236,6 +236,7 @@ def plot_latent_heatmap(sample_tensor, model, output_path, sample_size=24, epoch
 
     quant_t, quant_b, diff, id_t, id_b = model.encode(sample_tensor)
 
+    # TODO: implement lol
     # broadcast id_t and id_b to be the same size as the input.
     # sample_tensor is of shape (batch_size, channels, width, height)
     # id_t and id_b are of shape (batch_size, enc_width, enc_height)
