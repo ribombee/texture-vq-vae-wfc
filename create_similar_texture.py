@@ -78,7 +78,7 @@ def load_model(vqvae_path):
     return model
 
 
-def run_wfc_generation(trained_wfc_model, width_height, iteration_levels = 2, wrapping = False):
+def run_wfc_generation(trained_wfc_model, width_height, iteration_levels = 1, wrapping = False):
 
     level_height = width_height[1]
     level_width = width_height[0]
@@ -151,10 +151,10 @@ if __name__ == "__main__":
     # Run WFC on texture embedding
 
     wfc_model_b = train_texture_wfc(texture_codes=id_b.cpu().numpy(), window_size=2, wrapping=False)
-    new_id_b = run_wfc_generation(wfc_model_b, width_height=(32, 32), iteration_levels=2, wrapping=False)
+    new_id_b = run_wfc_generation(wfc_model_b, width_height=(32, 32), iteration_levels=1, wrapping=False)
 
     wfc_model_t = train_texture_wfc(texture_codes=id_t.cpu().numpy(), window_size=2, wrapping=False)
-    new_id_t = run_wfc_generation(wfc_model_t, width_height=(16, 16), iteration_levels=2, wrapping=False)
+    new_id_t = run_wfc_generation(wfc_model_t, width_height=(16, 16), iteration_levels=1, wrapping=False)
 
 
     # Decode new latent
@@ -180,10 +180,6 @@ if __name__ == "__main__":
     torchvision.utils.save_image(torch.cat(stacked_image, 0), img_output_path, normalize=True)
     torchvision.utils.save_image(torch.cat([new_textures_b, new_textures_t, fully_new_textures], 0), img_output_path, normalize=True)
 
-
-    # Plot
-
-    pass
 
 # Below is the old tensorflow-based version.
 '''

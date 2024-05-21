@@ -10,6 +10,7 @@ from torchvision import datasets, transforms, utils
 from omegaconf import OmegaConf
 from datetime import datetime
 from torchinfo import summary
+from torch.utils.tensorboard import SummaryWriter
 
 from tqdm import tqdm
 
@@ -119,26 +120,65 @@ class CycleScheduler:
 
         return lr, momentum
 
+def get_num_latent_loss(codebook_size):
+    def num_latents_loss(latents):
+        # latents is a list of tensors of shape (batch_size, num_latents, latent_size)
+        # We want to calculate the number of unique latents in each tensor, and return the sum of all of them.
+        # The purpose of this loss is to decrease the number of latents used by the encoder in order to be able to run WFC.
 
-def train(epoch, training_loader, validation_loader, model, optimizer, scheduler, device, output_path):
+        flat_latents = torch.flatten(latents, start_dim=1, end_dim=2)
+        #flat_latents = flat_latents.swapaxes(1, 2)
+
+        loss = 0
+
+        for batch_img in flat_latents:
+
+            loss += batch_img.unique().numel() / codebook_size
+
+        loss = loss / flat_latents.shape[0]
+
+        # unique_tensors = flat_latents.unique(dim=1) # dim 1 should be the flattened 16*16 vectors of size 32
+        return loss
+
+    return num_latents_loss
+
+def train(epoch, training_loader, validation_loader, model, optimizer, scheduler, device, output_path, writer, hierarchical=False):
 
     latent_loss_weight = 0.25
+    latent_count_loss_weight = 0.25
 
     mse_sum = 0
     mse_n = 0
 
     model.train() # In case we have called model.eval() elsewhere.
     criterion = nn.MSELoss()
+    num_latent_loss = get_num_latent_loss(model.conf.model.codebook_size)
     with tqdm(training_loader, unit="batch") as tloader:
         for i, (img, _) in enumerate(tloader):
             model.zero_grad()
 
             img = img.to(device)
-
-            out, latent_loss = model(img)
+            if hierarchical:
+                out, latent_loss, id_t, id_b = model(img)
+            else:
+                out, latent_loss, id = model(img)
             recon_loss = criterion(out, img)
             latent_loss = latent_loss.mean()
-            loss = recon_loss + latent_loss_weight * latent_loss
+            if hierarchical:
+                latent_count_loss_b = num_latent_loss(id_t)
+                latent_count_loss_t = num_latent_loss(id_b)
+                latent_count_loss = latent_count_loss_b + latent_count_loss_t
+            else:
+                latent_count_loss = num_latent_loss(id)
+            # latent_count_loss = latent_count_loss.mean()
+
+            loss = recon_loss + latent_loss_weight * latent_loss + latent_count_loss * latent_loss_weight
+
+            writer.add_scalar("Loss/train", loss, epoch)
+            writer.add_scalar("Recon_Loss/train", recon_loss, epoch)
+            writer.add_scalar("Latent_Loss/train", latent_loss, epoch)
+            writer.add_scalar("Latent_Count_Loss/train", latent_count_loss, epoch)
+
             loss.backward()
 
             if scheduler is not None:
@@ -157,17 +197,19 @@ def train(epoch, training_loader, validation_loader, model, optimizer, scheduler
                 (
                     f"epoch: {epoch + 1}; mse: {recon_loss.item():.5f}; "
                     f"latent: {latent_loss.item():.3f}; avg mse: {mse_sum / mse_n:.5f}; "
-                    f"lr: {lr:.5f}"
+                    f"latent_count: {latent_count_loss:.3f};"
+                    f"lr: {lr:.9f}"
                 )
             )
 
 
-def validate(epoch, validation_loader, model, device, output_path):
+def validate(epoch, validation_loader, model, device, output_path, writer, hierarchical=False):
     model.eval()
     with torch.no_grad():
         val_mse_sum = 0
         val_mse_n = 0
         criterion = nn.MSELoss()
+        num_latent_loss = get_num_latent_loss(model.conf.model.codebook_size)
 
         with tqdm(validation_loader, unit="batch") as vloader:
             for i, (img, _) in enumerate(vloader):
@@ -175,7 +217,10 @@ def validate(epoch, validation_loader, model, device, output_path):
 
                 img = img.to(device)
 
-                out, latent_loss = model(img)
+                if hierarchical:
+                    out, latent_loss, id_t, id_b = model(img)
+                else:
+                    out, latent_loss, id = model(img)
                 recon_loss = criterion(out, img)
                 latent_loss = latent_loss.mean()
 
@@ -185,17 +230,38 @@ def validate(epoch, validation_loader, model, device, output_path):
                 val_mse_sum += part_mse_sum
                 val_mse_n += part_mse_n
 
+                if hierarchical:
+                    latent_count_loss_b = num_latent_loss(id_t)
+                    latent_count_loss_t = num_latent_loss(id_b)
+                    latent_count_loss = latent_count_loss_b + latent_count_loss_t
+                else:
+                    latent_count_loss = num_latent_loss(id)
+
+                out_avg = out.mean()
+                in_avg = img.mean()
+                out_max = out.max()
+                in_max = img.max()
+
+                writer.add_scalar("Recon_Loss/val", recon_loss, epoch)
+                writer.add_scalar("Latent_Loss/val", latent_loss, epoch)
+                writer.add_scalar("Latent_Count_Loss/val", latent_count_loss, epoch)
+
                 vloader.set_description(
                     (
                         f"epoch: {epoch + 1}; val mse: {recon_loss.item():.5f}; "
                         f"val latent: {latent_loss.item():.3f}; avg val mse: {val_mse_sum / val_mse_n:.5f}; "
+                        f"val latent_count: {latent_count_loss:.3f}"
+                        f"val out_avg: {out_avg:.3f}; val in_avg: {in_avg:.3f}; val out_max: {out_max:.3f}; val in_max: {in_max:.3f};"
                     )
                 )
 
 def plot_output(sample_tensor, model, output_path, prefix="none", epoch=-1, sample_size=25):
 
     with torch.no_grad():
-        out, _ = model(sample_tensor)
+        if model.conf.model.hierarchical:
+            out, _, _, _ = model(sample_tensor)
+        else:
+            out, _, _ = model(sample_tensor)
 
     utils.save_image(
         torch.cat([sample_tensor, out], 0),
@@ -205,6 +271,8 @@ def plot_output(sample_tensor, model, output_path, prefix="none", epoch=-1, samp
     )
 
 def plot_mixed_up_latents(sample_tensor, model, output_path, sample_size=25, epoch=-1):
+    # NOTE: this is for a hierarchical model.
+
 
     quant_t, quant_b, diff, id_t, id_b = model.encode(sample_tensor)
 
@@ -222,7 +290,7 @@ def plot_mixed_up_latents(sample_tensor, model, output_path, sample_size=25, epo
 
     single_b_decoded = model.decode(quant_t, single_quant_b)
 
-    out, _ = model(sample_tensor)
+    out, _, _, _ = model(sample_tensor)
 
     utils.save_image(
         torch.cat([sample_tensor, out, single_t_decoded, single_b_decoded], 0),
@@ -232,24 +300,53 @@ def plot_mixed_up_latents(sample_tensor, model, output_path, sample_size=25, epo
     )
 
 
-def plot_latent_heatmap(sample_tensor, model, output_path, sample_size=24, epoch=-1):
+def float_to_heatmap_color(value, min, max):
+    # https://stackoverflow.com/questions/20792445/calculate-rgb-value-for-a-range-of-values-to-create-heat-map
 
-    quant_t, quant_b, diff, id_t, id_b = model.encode(sample_tensor)
+    ratio = 2 * (value-min) / (max - min)
+    b = torch.max(torch.zeros_like(value), 1.*(1. - ratio))
+    r = torch.max(torch.zeros_like(value), 1.*(ratio - 1))
+    g = 1 - b - r
+    return torch.cat([r[:, None, :, :], g[:, None, :, :], b[:, None, :, :]], 1)
 
-    # TODO: implement lol
-    # broadcast id_t and id_b to be the same size as the input.
-    # sample_tensor is of shape (batch_size, channels, width, height)
-    # id_t and id_b are of shape (batch_size, enc_width, enc_height)
-    # enc_size should be a factor of size
+def plot_latent_heatmap(sample_tensor, model, output_path, codebook_size, sample_size=24, epoch=-1, hierarchical=False):
 
-    out, _ = model(sample_tensor)
+    if hierarchical:
+        quant_t, quant_b, diff, id_t, id_b = model.encode(sample_tensor)
 
-    utils.save_image(
-        torch.cat([sample_tensor, out, single_t_decoded, single_b_decoded], 0),
-        output_path / f"sample/quantizer_tomfoolery_{str(epoch + 1).zfill(5)}.png",
-        nrow=sample_size,
-        normalize=True
-    )
+        out, _, _, _ = model(sample_tensor)
+
+        original_tensor_shape = sample_tensor.shape[2:4]
+
+        id_t = float_to_heatmap_color(id_t, 0, codebook_size)
+        id_b = float_to_heatmap_color(id_b, 0, codebook_size)
+
+        id_t_broadcast = torch.nn.Upsample(size=original_tensor_shape, mode="nearest")(id_t.float())
+        id_b_broadcast = torch.nn.Upsample(size=original_tensor_shape, mode="nearest")(id_b.float())
+
+        utils.save_image(
+            torch.cat([sample_tensor, out, id_t_broadcast, id_b_broadcast], 0),
+            output_path / f"sample/quantizer_tomfoolery_{str(epoch + 1).zfill(5)}.png",
+            nrow=sample_size,
+            normalize=True
+        )
+    else:
+        quant, diff, id = model.encode(sample_tensor)
+
+        out, _, _ = model(sample_tensor)
+
+        original_tensor_shape = sample_tensor.shape[2:4]
+
+        id = float_to_heatmap_color(id, 0, codebook_size)
+
+        id_broadcast = torch.nn.Upsample(size=original_tensor_shape, mode="nearest")(id.float())
+
+        utils.save_image(
+            torch.cat([sample_tensor, out, id_broadcast], 0),
+            output_path / f"sample/quantizer_tomfoolery_{str(epoch + 1).zfill(5)}.png",
+            nrow=sample_size,
+            normalize=True
+        )
 
 
 def make_folder_structure(output_path):
@@ -339,13 +436,21 @@ def train_vqvae(conf, data_path, output_path):
     val_sample = next(iter(val_loader))[0][:25].cuda()
     doom_sample = next(iter(doom_loader))[0][:25].cuda()
 
+    if not (output_dir / "logs").exists():
+        (output_dir / "logs").mkdir()
+
     for i in range(conf.training.epoch):
-        train(i, train_loader, val_loader, model, optimizer, scheduler, device, output_dir)
+        writer = SummaryWriter(log_dir=output_dir / "logs")
+        train(i, train_loader, val_loader, model, optimizer, scheduler, device, output_dir, writer)
         plot_output(train_sample, model, output_dir, prefix="train", epoch=i, sample_size=25)
-        validate(i, val_loader, model, device, output_dir)
+        validate(i, val_loader, model, device, output_dir, writer)
         plot_output(val_sample, model, output_dir, prefix="val", epoch=i, sample_size=25)
         plot_output(doom_sample, model, output_dir, prefix="doom", epoch=i, sample_size=25)
-        plot_mixed_up_latents(val_sample, model, output_dir, sample_size=25, epoch=i)
+        if conf.model.hierarchical:
+            plot_mixed_up_latents(val_sample, model, output_dir, sample_size=25, epoch=i)
+        plot_latent_heatmap(val_sample, model, output_dir, codebook_size=conf.model.codebook_size, sample_size=25, epoch=i)
+
+        writer.flush()
 
         torch.save(model.state_dict(), str(output_dir / f"checkpoint/vqvae_{str(i + 1).zfill(3)}.pt"))
 

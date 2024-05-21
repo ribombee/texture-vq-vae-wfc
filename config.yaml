@@ -5,11 +5,13 @@ model:
   num_res_channel: 32
   stride: 2
   codebook_size: 128  # n_embed, the number of embeddings the vector quantizer stores in the codebook
-  embed_dim: 32 # embed, the size of each embedded vector.
-  channel: 32
-
+  embed_dim: 128 # embed, the size of each embedded vector.
+  channel: 128
+  hierarchical: false
+  gated_conv: false
 training:
   batch_size: 64
-  lr: 3e-4
+  lr: 3e-5
   epoch: 560
   sched: "cycle"
+

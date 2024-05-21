@@ -8,7 +8,7 @@ import numpy as np
 import time
 #from sty import fg, bg, ef, rs, Style, RgbFg
 
-def generate_new_level(height, width, model, wrapping=False, max_attempts = 5, iteration_levels = 1):
+def generate_new_level(height, width, model, wrapping=False, max_attempts = 5, iteration_levels = 0):
 	
 	pattern_occurrences = model["pattern_counts"]
 	possible_patterns = list(pattern_occurrences.keys())
@@ -17,8 +17,12 @@ def generate_new_level(height, width, model, wrapping=False, max_attempts = 5, i
 	domain = model["domain"]
 
 	i=0
-	iteration_width_square_step = height ** 2 / iteration_levels
-	iteration_height_square_step = height ** 2 / iteration_levels
+	if iteration_levels != 0:
+		iteration_width_square_step = height ** 2 / iteration_levels
+		iteration_height_square_step = height ** 2 / iteration_levels
+	else:
+		iteration_width_square_step = 0
+		iteration_height_square_step = 0
 
 	while i < max_attempts:
 		center = None
