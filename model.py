@@ -1,7 +1,8 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-
+from itertools import chain
+from math import log
 
 # Gated convolution layers are from
 # https://github.com/avalonstrel/GatedConvolution_pytorch
@@ -15,21 +16,25 @@ class GatedConv2dWithActivation(torch.nn.Module):
     Output:\phi(f(I))*\sigmoid(g(I))
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding="same", dilation=1, groups=1, bias=True,batch_norm=True, activation=torch.nn.LeakyReLU(0.2, inplace=True)):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding="same", dilation=1, groups=1,
+                 bias=True, batch_norm=True, activation=torch.nn.LeakyReLU(0.2, inplace=True)):
         super(GatedConv2dWithActivation, self).__init__()
         self.batch_norm = batch_norm
         self.activation = activation
         self.conv2d = torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
-        self.mask_conv2d = torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
+        self.mask_conv2d = torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, dilation, groups,
+                                           bias)
         self.batch_norm2d = torch.nn.BatchNorm2d(out_channels)
         self.sigmoid = torch.nn.Sigmoid()
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight)
+
     def gated(self, mask):
         #return torch.clamp(mask, -1, 1)
         return self.sigmoid(mask)
+
     def forward(self, input):
         x = self.conv2d(input)
         mask = self.mask_conv2d(input)
@@ -42,6 +47,7 @@ class GatedConv2dWithActivation(torch.nn.Module):
         else:
             return x
 
+
 class GatedDeConv2dWithActivation(torch.nn.Module):
     """
     Gated DeConvlution layer with activation (default activation:LeakyReLU)
@@ -50,15 +56,19 @@ class GatedDeConv2dWithActivation(torch.nn.Module):
     Input: The feature from last layer "I"
     Output:\phi(f(I))*\sigmoid(g(I))
     """
-    def __init__(self, scale_factor, in_channels, out_channels, kernel_size, stride=1, padding="same", dilation=1, groups=1, bias=True, batch_norm=True,activation=torch.nn.LeakyReLU(0.2, inplace=True)):
+
+    def __init__(self, scale_factor, in_channels, out_channels, kernel_size, stride=1, padding="same", dilation=1,
+                 groups=1, bias=True, batch_norm=True, activation=torch.nn.LeakyReLU(0.2, inplace=True)):
         super(GatedDeConv2dWithActivation, self).__init__()
-        self.conv2d = GatedConv2dWithActivation(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, batch_norm, activation)
+        self.conv2d = GatedConv2dWithActivation(in_channels, out_channels, kernel_size, stride, padding, dilation,
+                                                groups, bias, batch_norm, activation)
         self.scale_factor = scale_factor
 
     def forward(self, input):
         #print(input.size())
-        x = F.interpolate(input, scale_factor= self.scale_factor)
+        x = F.interpolate(input, scale_factor=self.scale_factor)
         return self.conv2d(x)
+
 
 # VQ-VAE2 implementation Borrowed mostly from this implementation of the vq-vae-2 model
 # https://github.com/rosinality/vq-vae-2-pytorch/blob/master/vqvae.py
@@ -80,9 +90,9 @@ class Quantize(nn.Module):
     def forward(self, input):
         flatten = input.reshape(-1, self.dim)
         dist = (
-            flatten.pow(2).sum(1, keepdim=True)
-            - 2 * flatten @ self.embed
-            + self.embed.pow(2).sum(0, keepdim=True)
+                flatten.pow(2).sum(1, keepdim=True)
+                - 2 * flatten @ self.embed
+                + self.embed.pow(2).sum(0, keepdim=True)
         )
         _, embed_ind = (-dist).max(1)
         embed_onehot = F.one_hot(embed_ind, self.n_embed).type(flatten.dtype)
@@ -102,7 +112,7 @@ class Quantize(nn.Module):
             self.embed_avg.data.mul_(self.decay).add_(embed_sum, alpha=1 - self.decay)
             n = self.cluster_size.sum()
             cluster_size = (
-                (self.cluster_size + self.eps) / (n + self.n_embed * self.eps) * n
+                    (self.cluster_size + self.eps) / (n + self.n_embed * self.eps) * n
             )
             embed_normalized = self.embed_avg / cluster_size.unsqueeze(0)
             self.embed.data.copy_(embed_normalized)
@@ -144,7 +154,8 @@ class ResBlock(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, in_channel, channel, n_res_block, n_res_channel, stride, gated=False):
+    def __init__(self, in_channel, channel, n_res_block, n_res_channel, stride, compress_factor, kernel_size,
+                 gated=False):
         super().__init__()
 
         if gated:
@@ -152,35 +163,23 @@ class Encoder(nn.Module):
         else:
             conv = nn.Conv2d
 
-        if stride == 4:
-            blocks = [
-                # nn.Conv2d(in_channel, channel // 2, 4, stride=2, padding="same"),
-                # nn.ReLU(inplace=True),
-                # nn.Conv2d(channel // 2, channel, 4, stride=2, padding="same"),
-                # nn.ReLU(inplace=True),
-                # nn.Conv2d(channel, channel, 3, padding=1),
-                conv(in_channels=in_channel, out_channels=channel // 2, stride=1, kernel_size=3, padding="same"),
-                nn.LeakyReLU(0.2),
-                nn.MaxPool2d(2),
-                conv(in_channels=channel // 2, out_channels=channel, stride=1, kernel_size=3, padding="same"),
-                nn.LeakyReLU(0.2),
-                nn.MaxPool2d(2),
-                conv(in_channels=channel, out_channels=channel, kernel_size=1, padding="same")
+        num_striding = int(log(compress_factor, stride))
 
-            ]
+        blocks = [
+            conv(in_channels=in_channel, stride=1, out_channels=channel // (2 ** num_striding), kernel_size=kernel_size,
+                 padding="same"), nn.LeakyReLU(0.2)]
 
-        elif stride == 2:
-            blocks = [
-                # nn.Conv2d(in_channel, channel // 2, 4, stride=2, padding="same"),
-                # nn.ReLU(inplace=True),
-                # nn.Conv2d(channel // 2, channel, 3, padding=1),
-                conv(in_channels=in_channel, stride=1, out_channels=channel // 2,
-                                            kernel_size=3, padding="same"),
-                nn.LeakyReLU(0.2),
-                nn.MaxPool2d(2),
-                conv(in_channels=channel // 2, out_channels=channel, kernel_size=1, padding="same"),
-                nn.LeakyReLU(0.2),
-            ]
+        shrink_blocks = [[conv(in_channels=channel // (2 ** (num_striding - stride_idx)), stride=1,
+                               out_channels=channel // (2 ** (num_striding - stride_idx - 1)),
+                               kernel_size=kernel_size, padding="same"),
+                          nn.LeakyReLU(0.2),
+                          nn.MaxPool2d(stride),
+                          conv(in_channels=channel // (2 ** (num_striding - stride_idx - 1)),
+                               out_channels=channel // (2 ** (num_striding - stride_idx - 1)), kernel_size=1,
+                               padding="same"),
+                          nn.LeakyReLU(0.2)] for stride_idx in range(num_striding)]
+
+        blocks.extend(list(chain(*shrink_blocks)))
 
         for i in range(n_res_block):
             blocks.append(ResBlock(channel, n_res_channel))
@@ -195,7 +194,8 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
     def __init__(
-        self, in_channel, out_channel, channel, n_res_block, n_res_channel, stride, gated=False
+            self, in_channel, out_channel, channel, n_res_block, n_res_channel, stride, compress_factor, kernel_size,
+            gated=False
     ):
         super().__init__()
 
@@ -204,46 +204,31 @@ class Decoder(nn.Module):
         else:
             conv = nn.Conv2d
 
+        num_striding = int(log(compress_factor, stride))
         blocks = [conv(in_channel, channel, 3, padding="same")]
 
         for i in range(n_res_block):
             blocks.append(ResBlock(channel, n_res_channel, gated))
 
-        blocks.append(nn.LeakyReLU(0.2, inplace=True))
-
         if gated:
-            if stride == 4:
-                blocks.extend(
-                    [
-                        GatedDeConv2dWithActivation(scale_factor=2, in_channels=channel, out_channels=channel // 2,
-                                           kernel_size=3),
-                        GatedDeConv2dWithActivation(scale_factor=2, in_channels=channel // 2, out_channels=out_channel,
-                                           kernel_size=3)
-                    ]
-                )
 
-            elif stride == 2:
-                blocks.append(
-                    GatedDeConv2dWithActivation(scale_factor=2, in_channels=channel, out_channels=out_channel,
-                                       kernel_size=3))
+            [blocks.extend([
+                nn.LeakyReLU(0.2, inplace=True),
+                GatedDeConv2dWithActivation(scale_factor=stride,
+                                            in_channels=channel // (2 ** (num_striding - stride_idx - 1)),
+                                            out_channels=channel // (2 ** (num_striding - stride_idx)),
+                                            kernel_size=kernel_size)]) for stride_idx in range(num_striding)]
         else:
-            if stride == 4:
-                blocks.extend(
-                    [
-                        nn.ConvTranspose2d(stride=4, in_channels=channel, out_channels=channel // 2,
-                                                    kernel_size=3, padding=3),
 
-                    ]
-                )
+            [blocks.extend([nn.LeakyReLU(0.2, inplace=True),
+                            nn.ConvTranspose2d(stride=stride,
+                                               in_channels=channel // (2 ** stride_idx),
+                                               out_channels=channel // (2 ** (stride_idx + 1)),
+                                               kernel_size=kernel_size, padding=kernel_size // 2, output_padding=1)
 
-            elif stride == 2:
-                blocks.extend([
-                    nn.ConvTranspose2d(stride=2, in_channels=channel, out_channels=out_channel,
-                                                kernel_size=3, padding=1, output_padding=1)
-
-                    ])
-
-
+                            ]) for stride_idx in range(num_striding)]
+        blocks.append(
+            nn.Conv2d(channel // (2 ** num_striding), out_channel, kernel_size=kernel_size, padding="same"))
         blocks.append(nn.Tanh())
 
         self.blocks = nn.Sequential(*blocks)
@@ -254,15 +239,9 @@ class Decoder(nn.Module):
 
 class VQVAE(nn.Module):
     def __init__(
-        self,
-        conf,
-        in_channel=3,
-        # channel= conf.model.channel,
-        # n_res_block= conf.mode.,
-        # n_res_channel=32,
-        # embed_dim=64,
-        # n_embed=512,
-        # decay=0.99,
+            self,
+            conf,
+            in_channel=3,
     ):
         super().__init__()
         self.conf = conf
@@ -272,20 +251,26 @@ class VQVAE(nn.Module):
         n_res_block = conf.model.num_res_blocks
         n_res_channel = conf.model.num_res_channel
         n_embed = conf.model.codebook_size
-
-        self.enc_b = Encoder(in_channel, channel, n_res_block, n_res_channel, stride=self.conf.model.stride*2, gated=self.conf.model.gated_conv)
-        self.enc_t = Encoder(channel, channel, n_res_block, n_res_channel, stride=self.conf.model.stride, gated=self.conf.model.gated_conv)
+        self.compress_factor = conf.model.compress_factor
+        self.enc_b = Encoder(in_channel, channel, n_res_block, n_res_channel, stride=self.conf.model.stride,
+                             compress_factor=conf.model.compress_factor, kernel_size=conf.model.kernel_size,
+                             gated=self.conf.model.gated_conv)
+        self.enc_t = Encoder(channel, channel, n_res_block, n_res_channel, stride=self.conf.model.stride,
+                             compress_factor=conf.model.compress_factor // 2, kernel_size=conf.model.kernel_size,
+                             gated=self.conf.model.gated_conv)
         self.quantize_conv_t = nn.Conv2d(channel, embed_dim, 1)
         self.quantize_t = Quantize(embed_dim, n_embed)
         self.dec_t = Decoder(
-            embed_dim, embed_dim, channel, n_res_block, n_res_channel, stride=2
+            embed_dim, embed_dim, channel, n_res_block, n_res_channel, stride=2,
+            compress_factor=conf.model.compress_factor, kernel_size=conf.model.kernel_size, gated=conf.model.gated_conv
         )
+        self.stride = conf.model.stride
         self.quantize_conv_b = nn.Conv2d(embed_dim + channel, embed_dim, 1)
         self.quantize_b = Quantize(embed_dim, n_embed)
         self.upsample_t = nn.Upsample(scale_factor=2)
         self.upsample_t_conv = nn.ConvTranspose2d(
             embed_dim, embed_dim, 3, padding=1
-        ) # Replace with gated conv? probably
+        )  # Replace with gated conv? probably
         if conf.model.hierarchical:
             self.dec = Decoder(
                 embed_dim + embed_dim,
@@ -294,6 +279,8 @@ class VQVAE(nn.Module):
                 n_res_block,
                 n_res_channel,
                 stride=conf.model.stride,
+                compress_factor=conf.model.compress_factor,
+                kernel_size=conf.model.kernel_size,
                 gated=conf.model.gated_conv
             )
         else:
@@ -304,6 +291,8 @@ class VQVAE(nn.Module):
                 n_res_block,
                 n_res_channel,
                 stride=conf.model.stride,
+                compress_factor=conf.model.compress_factor,
+                kernel_size=conf.model.kernel_size,
                 gated=conf.model.gated_conv
             )
 
@@ -318,7 +307,6 @@ class VQVAE(nn.Module):
             dec = self.decode(quant, None)
 
             return dec, diff, id
-
 
     def encode(self, input):
 
@@ -342,6 +330,7 @@ class VQVAE(nn.Module):
             return quant_t, quant_b, diff_t + diff_b, id_t, id_b
         else:
             enc = self.enc_b(input)
+
             quant = self.quantize_conv_t(enc).permute(0, 2, 3, 1)
 
             quant, diff, id = self.quantize_t(quant)
@@ -353,15 +342,15 @@ class VQVAE(nn.Module):
 
     def decode(self, quant_t, quant_b):
         if self.conf.model.hierarchical:
-            upsample_t = self.upsample_t(quant_t)
-            upsample_t = self.upsample_t_conv(upsample_t)
-            quant = torch.cat([upsample_t, quant_b], 1)
+            # upsample_t = self.upsample_t(quant_t)
+            # upsample_t = self.upsample_t_conv(upsample_t)
+            quant = torch.cat([quant_t, quant_b], 1)
             dec = self.dec(quant)
 
             return dec
         else:
-            dec = self.upsample_t(quant_t)
-            dec = self.dec(dec)
+            # dec = self.upsample_t(quant_t)
+            dec = self.dec(quant_t)
 
             return dec
 
@@ -377,9 +366,9 @@ class VQVAE(nn.Module):
 
             return dec
         else:
-            quant = self.quantize_b.embed_code(code_t)
+            quant = self.quantize_t.embed_code(code_t)
             quant = quant.permute(0, 3, 1, 2)
 
-            dec = self.decode(quant)
+            dec = self.decode(quant, None)
 
             return dec

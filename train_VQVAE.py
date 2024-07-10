@@ -142,10 +142,10 @@ def get_num_latent_loss(codebook_size):
 
     return num_latents_loss
 
-def train(epoch, training_loader, validation_loader, model, optimizer, scheduler, device, output_path, writer, hierarchical=False):
+def train(epoch, training_loader, validation_loader, model, optimizer, scheduler, device, output_path, writer, conf, hierarchical=False):
 
-    latent_loss_weight = 0.25
-    latent_count_loss_weight = 0.25
+    latent_loss_weight = 1
+    latent_count_loss_weight = conf.training.count_loss_weight
 
     mse_sum = 0
     mse_n = 0
@@ -172,7 +172,7 @@ def train(epoch, training_loader, validation_loader, model, optimizer, scheduler
                 latent_count_loss = num_latent_loss(id)
             # latent_count_loss = latent_count_loss.mean()
 
-            loss = recon_loss + latent_loss_weight * latent_loss + latent_count_loss * latent_loss_weight
+            loss = recon_loss + latent_loss_weight * latent_loss + latent_count_loss * latent_count_loss_weight
 
             writer.add_scalar("Loss/train", loss, epoch)
             writer.add_scalar("Recon_Loss/train", recon_loss, epoch)
@@ -205,9 +205,12 @@ def train(epoch, training_loader, validation_loader, model, optimizer, scheduler
 
 def validate(epoch, validation_loader, model, device, output_path, writer, hierarchical=False):
     model.eval()
+    conf = model.conf
     with torch.no_grad():
         val_mse_sum = 0
         val_mse_n = 0
+        val_latent_sum = 0
+        val_latent_count_sum = 0
         criterion = nn.MSELoss()
         num_latent_loss = get_num_latent_loss(model.conf.model.codebook_size)
 
@@ -226,9 +229,11 @@ def validate(epoch, validation_loader, model, device, output_path, writer, hiera
 
                 part_mse_sum = recon_loss.item() * img.shape[0]
                 part_mse_n = img.shape[0]
+                part_latent_sum = latent_loss.item() * img.shape[0]
 
                 val_mse_sum += part_mse_sum
                 val_mse_n += part_mse_n
+                val_latent_sum += part_latent_sum
 
                 if hierarchical:
                     latent_count_loss_b = num_latent_loss(id_t)
@@ -236,6 +241,9 @@ def validate(epoch, validation_loader, model, device, output_path, writer, hiera
                     latent_count_loss = latent_count_loss_b + latent_count_loss_t
                 else:
                     latent_count_loss = num_latent_loss(id)
+
+                part_latent_count_sum = latent_count_loss * img.shape[0]
+                val_latent_count_sum += part_latent_count_sum
 
                 out_avg = out.mean()
                 in_avg = img.mean()
@@ -254,6 +262,7 @@ def validate(epoch, validation_loader, model, device, output_path, writer, hiera
                         f"val out_avg: {out_avg:.3f}; val in_avg: {in_avg:.3f}; val out_max: {out_max:.3f}; val in_max: {in_max:.3f};"
                     )
                 )
+        return (val_mse_sum + val_latent_sum + val_latent_count_sum) / val_mse_n
 
 def plot_output(sample_tensor, model, output_path, prefix="none", epoch=-1, sample_size=25):
 
@@ -414,6 +423,20 @@ def get_data_loaders(data_path, doom_path="data/Doom_textures"):
 
     return train_loader, val_loader, doom_loader
 
+def get_early_stopper(patience, min_delta):
+
+    lowest_loss = float("inf")
+    def early_stopper(val_losses):
+        if len(val_losses) < patience:
+            return False
+
+        if all(val_losses[-patience] - val_losses[-i] < min_delta for i in range(1, patience)):
+            return True
+
+        return False
+
+    return early_stopper
+
 
 def train_vqvae(conf, data_path, output_path):
     device = "cuda"
@@ -432,6 +455,9 @@ def train_vqvae(conf, data_path, output_path):
             warmup_proportion=0.05,
         )
 
+    early_stopper = get_early_stopper(conf.training.es_patience, conf.training.es_min_delta)
+    val_losses = []
+
     train_sample = next(iter(train_loader))[0][:25].cuda()
     val_sample = next(iter(val_loader))[0][:25].cuda()
     doom_sample = next(iter(doom_loader))[0][:25].cuda()
@@ -441,9 +467,10 @@ def train_vqvae(conf, data_path, output_path):
 
     for i in range(conf.training.epoch):
         writer = SummaryWriter(log_dir=output_dir / "logs")
-        train(i, train_loader, val_loader, model, optimizer, scheduler, device, output_dir, writer)
+        train(i, train_loader, val_loader, model, optimizer, scheduler, device, output_dir, writer, conf)
         plot_output(train_sample, model, output_dir, prefix="train", epoch=i, sample_size=25)
-        validate(i, val_loader, model, device, output_dir, writer)
+        val_loss = validate(i, val_loader, model, device, output_dir, writer)
+        val_losses.append(val_loss)
         plot_output(val_sample, model, output_dir, prefix="val", epoch=i, sample_size=25)
         plot_output(doom_sample, model, output_dir, prefix="doom", epoch=i, sample_size=25)
         if conf.model.hierarchical:
@@ -454,6 +481,9 @@ def train_vqvae(conf, data_path, output_path):
 
         torch.save(model.state_dict(), str(output_dir / f"checkpoint/vqvae_{str(i + 1).zfill(3)}.pt"))
 
+        if i > conf.training.es_begin:
+            if early_stopper(val_losses):
+                break
 
 def __load_config():
     conf = OmegaConf.load("config.yaml")
