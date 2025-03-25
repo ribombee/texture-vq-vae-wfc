@@ -18,7 +18,9 @@ from model import VQVAE
 # from scheduler import CycleScheduler
 from math import cos, pi, floor, sin
 from pathlib import Path
-from torchvision.transforms import ToTensor
+import torchmetrics
+import torchvision.transforms as transforms
+
 
 
 def anneal_linear(start, end, proportion):
@@ -152,6 +154,7 @@ def train(epoch, training_loader, validation_loader, model, optimizer, scheduler
 
     model.train() # In case we have called model.eval() elsewhere.
     criterion = nn.MSELoss()
+    ssim_metric = torchmetrics.StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
     num_latent_loss = get_num_latent_loss(model.conf.model.codebook_size)
     with tqdm(training_loader, unit="batch") as tloader:
         for i, (img, _) in enumerate(tloader):
@@ -173,11 +176,13 @@ def train(epoch, training_loader, validation_loader, model, optimizer, scheduler
             # latent_count_loss = latent_count_loss.mean()
 
             loss = recon_loss + latent_loss_weight * latent_loss + latent_count_loss * latent_count_loss_weight
+            ssim_value = ssim_metric(out, img)
 
             writer.add_scalar("Loss/train", loss, epoch)
             writer.add_scalar("Recon_Loss/train", recon_loss, epoch)
             writer.add_scalar("Latent_Loss/train", latent_loss, epoch)
             writer.add_scalar("Latent_Count_Loss/train", latent_count_loss, epoch)
+            writer.add_scalar("SSIM/train", ssim_value.item(), epoch)
 
             loss.backward()
 
@@ -195,7 +200,7 @@ def train(epoch, training_loader, validation_loader, model, optimizer, scheduler
 
             tloader.set_description(
                 (
-                    f"epoch: {epoch + 1}; mse: {recon_loss.item():.5f}; "
+                    f"epoch: {epoch + 1}; mse: {recon_loss.item():.5f}; ssim: {ssim_value.item():.5f}; "
                     f"latent: {latent_loss.item():.3f}; avg mse: {mse_sum / mse_n:.5f}; "
                     f"latent_count: {latent_count_loss:.3f};"
                     f"lr: {lr:.9f}"
@@ -212,6 +217,7 @@ def validate(epoch, validation_loader, model, device, output_path, writer, hiera
         val_latent_sum = 0
         val_latent_count_sum = 0
         criterion = nn.MSELoss()
+        ssim_metric = torchmetrics.StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
         num_latent_loss = get_num_latent_loss(model.conf.model.codebook_size)
 
         with tqdm(validation_loader, unit="batch") as vloader:
@@ -235,6 +241,8 @@ def validate(epoch, validation_loader, model, device, output_path, writer, hiera
                 val_mse_n += part_mse_n
                 val_latent_sum += part_latent_sum
 
+                ssim_value = ssim_metric(out, img)
+
                 if hierarchical:
                     latent_count_loss_b = num_latent_loss(id_t)
                     latent_count_loss_t = num_latent_loss(id_b)
@@ -253,16 +261,17 @@ def validate(epoch, validation_loader, model, device, output_path, writer, hiera
                 writer.add_scalar("Recon_Loss/val", recon_loss, epoch)
                 writer.add_scalar("Latent_Loss/val", latent_loss, epoch)
                 writer.add_scalar("Latent_Count_Loss/val", latent_count_loss, epoch)
+                writer.add_scalar("SSIM/val", ssim_value.item(), epoch)
 
                 vloader.set_description(
                     (
-                        f"epoch: {epoch + 1}; val mse: {recon_loss.item():.5f}; "
+                        f"epoch: {epoch + 1}; val mse: {recon_loss.item():.5f}; val ssim: {ssim_value.item():.5f}; "
                         f"val latent: {latent_loss.item():.3f}; avg val mse: {val_mse_sum / val_mse_n:.5f}; "
                         f"val latent_count: {latent_count_loss:.3f}"
                         f"val out_avg: {out_avg:.3f}; val in_avg: {in_avg:.3f}; val out_max: {out_max:.3f}; val in_max: {in_max:.3f};"
-                    )
+                        f"val stop criteria: {(val_mse_sum + val_latent_sum + val_latent_count_sum) / val_mse_n:.5f}"                    )
                 )
-        return (val_mse_sum + val_latent_sum + val_latent_count_sum) / val_mse_n
+        return (val_mse_sum) / val_mse_n
 
 def plot_output(sample_tensor, model, output_path, prefix="none", epoch=-1, sample_size=25):
 
@@ -281,7 +290,6 @@ def plot_output(sample_tensor, model, output_path, prefix="none", epoch=-1, samp
 
 def plot_mixed_up_latents(sample_tensor, model, output_path, sample_size=25, epoch=-1):
     # NOTE: this is for a hierarchical model.
-
 
     quant_t, quant_b, diff, id_t, id_b = model.encode(sample_tensor)
 
@@ -377,12 +385,10 @@ def make_folder_structure(output_path):
 
     return output_dir
 
-
-def get_data_loaders(data_path, doom_path="data/Doom_textures"):
-
+def get_dtd_data_loaders(data_path, doom_path="data/Doom_textures"):
     transform = transforms.Compose(
         [
-            transforms.RandAugment(num_ops=3, magnitude=3),
+            transforms.RandAugment(),
             transforms.Resize(conf.data.size),
             transforms.CenterCrop(conf.data.size),
             transforms.ToTensor(),
@@ -440,9 +446,9 @@ def get_early_stopper(patience, min_delta):
 
 def train_vqvae(conf, data_path, output_path):
     device = "cuda"
-    output_dir = make_folder_structure(output_path) # Makes the folder structure, including a timstamped run folder
-    train_loader, val_loader, doom_loader = get_data_loaders(data_path)
-    model = VQVAE(conf=conf).to(device)
+    output_dir = make_folder_structure(output_path)
+    train_loader, val_loader, doom_loader = get_dtd_data_loaders(data_path)
+    model = VQVAE(conf=conf, gated=False).to(device)
     print(summary(model, (conf.training.batch_size, 3, conf.data.size, conf.data.size)))
     optimizer = optim.Adam(model.parameters(), lr=conf.training.lr)
     scheduler = None
@@ -455,7 +461,9 @@ def train_vqvae(conf, data_path, output_path):
             warmup_proportion=0.05,
         )
 
-    early_stopper = get_early_stopper(conf.training.es_patience, conf.training.es_min_delta)
+    encoder_early_stopper = get_early_stopper(conf.training.es_patience, conf.training.es_min_delta)
+    encoder_stopped = False
+    encoder_stopped_at = 0
     val_losses = []
 
     train_sample = next(iter(train_loader))[0][:25].cuda()
@@ -473,8 +481,6 @@ def train_vqvae(conf, data_path, output_path):
         val_losses.append(val_loss)
         plot_output(val_sample, model, output_dir, prefix="val", epoch=i, sample_size=25)
         plot_output(doom_sample, model, output_dir, prefix="doom", epoch=i, sample_size=25)
-        if conf.model.hierarchical:
-            plot_mixed_up_latents(val_sample, model, output_dir, sample_size=25, epoch=i)
         plot_latent_heatmap(val_sample, model, output_dir, codebook_size=conf.model.codebook_size, sample_size=25, epoch=i)
 
         writer.flush()
@@ -482,8 +488,15 @@ def train_vqvae(conf, data_path, output_path):
         torch.save(model.state_dict(), str(output_dir / f"checkpoint/vqvae_{str(i + 1).zfill(3)}.pt"))
 
         if i > conf.training.es_begin:
-            if early_stopper(val_losses):
-                break
+            if not encoder_stopped:
+                if encoder_early_stopper(val_losses):
+                    for param in model.enc_b.parameters():
+                        param.requires_grad = False
+                    encoder_stopped = True
+                    encoder_stopped_at = i
+
+
+    print(f"Encoder stopped at epoch {encoder_stopped_at}")
 
 def __load_config():
     conf = OmegaConf.load("config.yaml")

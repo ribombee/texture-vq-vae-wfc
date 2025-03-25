@@ -2,22 +2,22 @@ data:
   size: 128
 model:
   num_res_blocks: 2
-  num_res_channel: 32
+  num_res_channel: 64
   stride: 2
   compress_factor: 8 # How much to compress the height and width of the input, the number must be a power of stride
   codebook_size: 128  # n_embed, the number of embeddings the vector quantizer stores in the codebook
   embed_dim: 128 # embed, the size of each embedded vector.
-  channel: 128
+  channel: 64
   hierarchical: false
   gated_conv: true
-  kernel_size: 5
+  kernel_size: 3
 training:
   batch_size: 64
   lr: 3e-3
-  epoch: 560
+  epoch: 400
   sched: "cycle"
   es_begin: 50
-  es_patience: 20
+  es_patience: 10
   es_min_delta: 0.0001
-  count_loss_weight: 5
+  count_loss_weight: 3
 

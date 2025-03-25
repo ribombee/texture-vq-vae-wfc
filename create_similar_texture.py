@@ -100,7 +100,7 @@ def run_wfc_generation(trained_wfc_model, width_height, iteration_levels = 1, wr
 
 def decode_latents(id_t, id_b, model):
 
-    decoded = model.decode_code(id_t, id_b)
+    decoded = model.read_txt_and_decode_code(id_t, id_b)
 
     return decoded
 
@@ -153,7 +153,7 @@ def float_to_heatmap_color(value, min, max):
     return torch.cat([r[:, None, :, :], g[:, None, :, :], b[:, None, :, :]], 1)
 
 
-def run_on_batch_of_images(texture_paths, model, conf, output_path, num_per_texture=1):
+def run_on_batch_of_images_from_paths(texture_paths, model, conf, output_path, num_per_texture=1):
     for texture_path in texture_paths:
 
         texture_tensor = load_texture(texture_path, conf)
@@ -207,7 +207,7 @@ def run_on_batch_of_images(texture_paths, model, conf, output_path, num_per_text
                 new_id = torch.LongTensor(new_id).cuda()
                 new_id = new_id[None, :, :]
 
-                new_textures = model.decode_code(new_id, None)
+                new_textures = model.read_txt_and_decode_code(new_id, None)
 
                 texture_name = texture_path.stem
                 img_output_path = output_path / "wfc_sample"

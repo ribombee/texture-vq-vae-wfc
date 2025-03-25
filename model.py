@@ -135,7 +135,7 @@ class ResBlock(nn.Module):
 
                 nn.LeakyReLU(),
                 GatedConv2dWithActivation(in_channels=in_channel, out_channels=channel, kernel_size=3, padding="same"),
-                GatedConv2dWithActivation(in_channels=channel, out_channels=channel, kernel_size=1)
+                GatedConv2dWithActivation(in_channels=channel, out_channels=in_channel, kernel_size=1)
             )
         else:
             self.conv = nn.Sequential(
@@ -215,8 +215,8 @@ class Decoder(nn.Module):
             [blocks.extend([
                 nn.LeakyReLU(0.2, inplace=True),
                 GatedDeConv2dWithActivation(scale_factor=stride,
-                                            in_channels=channel // (2 ** (num_striding - stride_idx - 1)),
-                                            out_channels=channel // (2 ** (num_striding - stride_idx)),
+                                            in_channels=channel // (2 ** (stride_idx)),
+                                            out_channels=channel // (2 ** (stride_idx + 1)),
                                             kernel_size=kernel_size)]) for stride_idx in range(num_striding)]
         else:
 
@@ -236,12 +236,12 @@ class Decoder(nn.Module):
     def forward(self, input):
         return self.blocks(input)
 
-
 class VQVAE(nn.Module):
     def __init__(
             self,
             conf,
             in_channel=3,
+            gated=True
     ):
         super().__init__()
         self.conf = conf
@@ -254,15 +254,12 @@ class VQVAE(nn.Module):
         self.compress_factor = conf.model.compress_factor
         self.enc_b = Encoder(in_channel, channel, n_res_block, n_res_channel, stride=self.conf.model.stride,
                              compress_factor=conf.model.compress_factor, kernel_size=conf.model.kernel_size,
-                             gated=self.conf.model.gated_conv)
-        self.enc_t = Encoder(channel, channel, n_res_block, n_res_channel, stride=self.conf.model.stride,
-                             compress_factor=conf.model.compress_factor // 2, kernel_size=conf.model.kernel_size,
-                             gated=self.conf.model.gated_conv)
+                             gated=gated)
         self.quantize_conv_t = nn.Conv2d(channel, embed_dim, 1)
         self.quantize_t = Quantize(embed_dim, n_embed)
         self.dec_t = Decoder(
             embed_dim, embed_dim, channel, n_res_block, n_res_channel, stride=2,
-            compress_factor=conf.model.compress_factor, kernel_size=conf.model.kernel_size, gated=conf.model.gated_conv
+            compress_factor=conf.model.compress_factor, kernel_size=conf.model.kernel_size, gated=gated
         )
         self.stride = conf.model.stride
         self.quantize_conv_b = nn.Conv2d(embed_dim + channel, embed_dim, 1)
@@ -270,105 +267,38 @@ class VQVAE(nn.Module):
         self.upsample_t = nn.Upsample(scale_factor=2)
         self.upsample_t_conv = nn.ConvTranspose2d(
             embed_dim, embed_dim, 3, padding=1
-        )  # Replace with gated conv? probably
-        if conf.model.hierarchical:
-            self.dec = Decoder(
-                embed_dim + embed_dim,
-                in_channel,
-                channel,
-                n_res_block,
-                n_res_channel,
-                stride=conf.model.stride,
-                compress_factor=conf.model.compress_factor,
-                kernel_size=conf.model.kernel_size,
-                gated=conf.model.gated_conv
-            )
-        else:
-            self.dec = Decoder(
-                embed_dim,
-                in_channel,
-                channel,
-                n_res_block,
-                n_res_channel,
-                stride=conf.model.stride,
-                compress_factor=conf.model.compress_factor,
-                kernel_size=conf.model.kernel_size,
-                gated=conf.model.gated_conv
-            )
+        )
+        self.dec = Decoder(
+            embed_dim,
+            in_channel,
+            channel,
+            n_res_block,
+            n_res_channel,
+            stride=conf.model.stride,
+            compress_factor=conf.model.compress_factor,
+            kernel_size=conf.model.kernel_size,
+            gated=gated
+        )
 
     def forward(self, input):
-        if self.conf.model.hierarchical:
-            quant_t, quant_b, diff, id_t, id_b = self.encode(input)
-            dec = self.decode(quant_t, quant_b)
-
-            return dec, diff, id_t, id_b
-        else:
-            quant, diff, id = self.encode(input)
-            dec = self.decode(quant, None)
-
-            return dec, diff, id
+        quant, diff, id = self.encode(input)
+        dec = self.decode(quant, None)
+        return dec, diff, id
 
     def encode(self, input):
-
-        if self.conf.model.hierarchical:
-            enc_b = self.enc_b(input)
-            enc_t = self.enc_t(enc_b)
-
-            quant_t = self.quantize_conv_t(enc_t).permute(0, 2, 3, 1)
-            quant_t, diff_t, id_t = self.quantize_t(quant_t)
-            quant_t = quant_t.permute(0, 3, 1, 2)
-            diff_t = diff_t.unsqueeze(0)
-
-            dec_t = self.dec_t(quant_t)
-            enc_b = torch.cat([dec_t, enc_b], 1)
-
-            quant_b = self.quantize_conv_b(enc_b).permute(0, 2, 3, 1)
-            quant_b, diff_b, id_b = self.quantize_b(quant_b)
-            quant_b = quant_b.permute(0, 3, 1, 2)
-            diff_b = diff_b.unsqueeze(0)
-
-            return quant_t, quant_b, diff_t + diff_b, id_t, id_b
-        else:
-            enc = self.enc_b(input)
-
-            quant = self.quantize_conv_t(enc).permute(0, 2, 3, 1)
-
-            quant, diff, id = self.quantize_t(quant)
-
-            quant = quant.permute(0, 3, 1, 2)
-            diff = diff.unsqueeze(0)
-
-            return quant, diff, id
+        enc = self.enc_b(input)
+        quant = self.quantize_conv_t(enc).permute(0, 2, 3, 1)
+        quant, diff, id = self.quantize_t(quant)
+        quant = quant.permute(0, 3, 1, 2)
+        diff = diff.unsqueeze(0)
+        return quant, diff, id
 
     def decode(self, quant_t, quant_b):
-        if self.conf.model.hierarchical:
-            # upsample_t = self.upsample_t(quant_t)
-            # upsample_t = self.upsample_t_conv(upsample_t)
-            quant = torch.cat([quant_t, quant_b], 1)
-            dec = self.dec(quant)
-
-            return dec
-        else:
-            # dec = self.upsample_t(quant_t)
-            dec = self.dec(quant_t)
-
-            return dec
+        dec = self.dec(quant_t)
+        return dec
 
     def decode_code(self, code_t, code_b):
-        if self.conf.model.hierarchical:
-
-            quant_t = self.quantize_t.embed_code(code_t)
-            quant_t = quant_t.permute(0, 3, 1, 2)
-            quant_b = self.quantize_b.embed_code(code_b)
-            quant_b = quant_b.permute(0, 3, 1, 2)
-
-            dec = self.decode(quant_t, quant_b)
-
-            return dec
-        else:
-            quant = self.quantize_t.embed_code(code_t)
-            quant = quant.permute(0, 3, 1, 2)
-
-            dec = self.decode(quant, None)
-
-            return dec
+        quant = self.quantize_t.embed_code(code_t)
+        quant = quant.permute(0, 3, 1, 2)
+        dec = self.decode(quant, None)
+        return dec

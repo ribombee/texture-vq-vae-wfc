@@ -1,0 +1,17 @@
+pillow~=10.3.0
+numpy~=1.26.3
+torchvision~=0.17.0
+omegaconf~=2.3.0
+torchinfo~=1.8.0
+tqdm~=4.66.3
+pandas~=2.0.3
+lpips~=0.1.4
+torcheval~=0.0.7
+torchmetrics~=1.6.3
+pytorch~=2.2.0
+argparse
+torch
+pathlib
+datetime
+random
+pickle
