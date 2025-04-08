@@ -3,7 +3,7 @@ from omegaconf import OmegaConf
 import numpy as np
 from model import VQVAE
 import torch
-from create_similar_texture import train_texture_wfc, run_wfc_generation, get_texture_codes, float_to_heatmap_color
+from util import get_texture_codes, float_to_heatmap_color
 import torchvision
 
 

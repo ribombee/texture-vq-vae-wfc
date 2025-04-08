@@ -9,7 +9,7 @@ from torchvision import transforms, datasets, utils
 import pandas as pd
 from torcheval.metrics.functional import peak_signal_noise_ratio
 from torchmetrics import StructuralSimilarityIndexMeasure
-from create_similar_texture import train_texture_wfc, run_wfc_generation, get_texture_codes, float_to_heatmap_color
+from util import get_texture_codes, float_to_heatmap_color
 from pathlib import Path
 import random
 import string
@@ -122,8 +122,12 @@ def run_experiments(reg_model, no_es_model, no_gated_model, data_loc, output_loc
     # lpips = get_lpips_metric()
     ssim = get_ssim()
 
-    (output_loc / "no_es_codes").mkdir()
-    (output_loc / "no_gated_codes").mkdir()
+    reg_output_loc = output_loc / "regular"
+    no_es_output_loc = output_loc / "no_es"
+    no_gated_output_loc = output_loc / "no_gated"
+    reg_output_loc.mkdir()
+    no_es_output_loc.mkdir()
+    no_gated_output_loc.mkdir()
 
     for test_datapoint in tqdm(test_data):
         torch.cuda.empty_cache()
@@ -140,9 +144,18 @@ def run_experiments(reg_model, no_es_model, no_gated_model, data_loc, output_loc
         datapoint_dict["filename"] = ''.join(random.choice(string.ascii_lowercase) for i in range(16))
 
         output_folder = output_loc / f"{datapoint_dict['filename']}"
+        reg_output_folder = reg_output_loc / f"{datapoint_dict['filename']}"
+        no_es_output_folder = no_es_output_loc / f"{datapoint_dict['filename']}"
+        no_gated_output_folder = no_gated_output_loc / f"{datapoint_dict['filename']}"
+
         if not output_folder.exists():
             output_folder.mkdir()
-
+        if not reg_output_folder.exists():
+            reg_output_folder.mkdir()
+        if not no_es_output_folder.exists():
+            no_es_output_folder.mkdir()
+        if not no_gated_output_folder.exists():
+            no_gated_output_folder.mkdir()
 
         with torch.no_grad():
             test_datapoint = test_datapoint.to("cuda")
@@ -189,9 +202,9 @@ def run_experiments(reg_model, no_es_model, no_gated_model, data_loc, output_loc
         utils.save_image(combined_image, output_folder / "combined.png", normalize=True)
 
         row_list.append(datapoint_dict)
-        export_ids_as_text(reg_model_ids, reg_model, output_loc / f"{datapoint_dict['filename']}.txt")
-        export_ids_as_text(no_es_model_ids, no_es_model,  (output_loc / "no_es_codes" ) / f"{datapoint_dict['filename']}.txt")
-        export_ids_as_text(no_gated_model_ids, no_gated_model, (output_loc / "no_gated_codes") / f"{datapoint_dict['filename']}.txt")
+        export_ids_as_text(reg_model_ids, reg_model, reg_output_loc / f"{datapoint_dict['filename']}.txt")
+        export_ids_as_text(no_es_model_ids, no_es_model,  no_es_output_loc / f"{datapoint_dict['filename']}.txt")
+        export_ids_as_text(no_gated_model_ids, no_gated_model, no_gated_output_loc / f"{datapoint_dict['filename']}.txt")
 
     results_df = pd.DataFrame(row_list)
     results_df.to_csv(output_loc / "results.csv")

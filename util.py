@@ -1,112 +1,93 @@
-import tensorflow as tf
-import matplotlib.pyplot as plt
-import cv2 as cv
+import torch
 import numpy as np
-from tensorflow import keras
-
-def normalize_and_hsv_image(image):
-    image = image / 255  # Normalize
-    image = tf.image.rgb_to_hsv(image)  # Swap to hsv
-
-    return image
-
-def denormalize_and_rgb_image(image):
-
-    # Convert the image tensor back to RGB
-    image = tf.image.hsv_to_rgb(image)
-
-    #Denormalize
-    image = image * 255
-
-    return image
-
-def get_image_processor(image_size, augment=False):
-
-    data_augmentation = keras.Sequential([
-        keras.layers.RandomFlip("horizontal_and_vertical"),
-        keras.layers.RandomBrightness(0.2),
-        keras.layers.RandomContrast(0.2),
-        keras.layers.RandomRotation(0.2),
-        keras.layers.RandomZoom(0.2, 0.2),
-        keras.layers.RandomCrop(image_size[0], image_size[1])]
-    )
-
-    def process_image(image):
-        if augment:
-            if np.random.rand() > 0.7:
-                image = data_augmentation(image)
-
-        image = tf.image.resize_with_crop_or_pad(image, image_size[0], image_size[1])
-        image = normalize_and_hsv_image(image)
-        return image
-
-    return process_image
+import torchvision
+from model import VQVAE
+import datetime
+from omegaconf import OmegaConf
 
 
+# IO UTILITIES
 
-def hsv_tf_to_cv(image):
+def __load_config():
+    conf = OmegaConf.load("config.yaml")
 
-    hue, sat, val = cv.split(image)
-    hue = np.clip(hue * 179, 0, 179)
-    sat = np.clip(sat * 255, 0, 255)
-    val = np.clip(val * 255, 0, 255)
+    print(f"loaded configs: {conf}")
 
-    scaled = np.stack([hue, sat, val])
-    scaled = np.transpose(scaled, (1, 2, 0))
-
-    return scaled
-
-def hsv_cv_to_tf(image):
-    hue, sat, val = cv.split(image)
-    hue = hue / 179
-    sat = sat / 255
-    val = val / 255
-
-    normalized_sprite = np.stack([hue, sat, val])
-    normalized_sprite = np.transpose(normalized_sprite, (1, 2, 0))
-
-    return normalized_sprite
+    return conf
 
 
-def plot_results(original, codes, reconstruction, img_save_path, codebook_size=64):
-    plt.subplot(1, 3, 1)
-    plt.imshow(cv.cvtColor(original, cv.COLOR_HSV2RGB))
-    plt.title("Original")
-    plt.axis("off")
+def make_folder_structure(output_path):
 
-    plt.subplot(1, 3, 2)
-    plt.imshow(codes, vmin= 0, vmax = codebook_size)
-    # TODO: make this plot bigger or something to let annot=True fit in the plot nicely
-    # sns.heatmap(codes, vmin=0, vmax=codebook_size)
-    plt.title("Codes")
-    plt.axis("Off")
+    time_now = datetime.now().strftime('%m-%d-%H-%M')
+    output_dir = output_path / time_now
 
-    plt.subplot(1, 3, 3)
-    plt.imshow(cv.cvtColor(reconstruction, cv.COLOR_HSV2RGB))
-    plt.title("Reconstruction")
-    plt.axis("off")
+    if not output_dir.exists():
+        output_dir.mkdir()
 
-    plt.savefig(img_save_path, dpi=300, bbox_inches="tight")
-    plt.show()
-    plt.close()
+    if not (output_dir / "wfc_sample").exists():
+        (output_dir / "wfc_sample").mkdir()
+
+    return output_dir
 
 
-def plot_results1(original, codes, reconstruction, img_save_path, codebook_size=64):
-    plt.subplot(1, 3, 1)
-    plt.imshow(original)
-    plt.title("Original")
-    plt.axis("off")
+def load_texture(texture_path, conf):
 
-    plt.subplot(1, 3, 2)
-    plt.imshow(codes, vmin= 0, vmax = codebook_size)
-    plt.title("Codes")
-    plt.axis("Off")
+    img = torchvision.io.read_image(str(texture_path), mode =torchvision.io.ImageReadMode.RGB)
+    # Convert from uint8 to float32
+    img = img.float()
+    img = img.cuda()
 
-    plt.subplot(1, 3, 3)
-    plt.imshow(reconstruction)
-    plt.title("Reconstruction")
-    plt.axis("off")
+    # Normalize to mean 0.5 stdv 0.5 i guess
 
-    plt.savefig(img_save_path, dpi=300, bbox_inches="tight")
-    plt.show()
-    plt.close()
+    img = img / 255.0
+
+    normalizer = torchvision.transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+    resize = torchvision.transforms.Resize(conf.data.size)
+
+    # Add a batch dimension
+    img = img[None, :, :, :]
+
+    img = resize(img)
+    img = normalizer(img)
+    return img
+
+
+# MODEL UTILITIES
+
+def decode_latents(id_t, id_b, model):
+
+    decoded = model.read_txt_and_decode_code(id_t, id_b)
+
+    return decoded
+
+def load_model(vqvae_path, conf):
+
+    device = "cuda"
+
+    model = VQVAE(conf=conf).to(device)
+    model.load_state_dict(torch.load(vqvae_path))
+
+    return model
+
+def get_texture_codes(texture_tensor, model):
+
+    if model.conf.model.hierarchical:
+        quant_t, quant_b, diff, id_t, id_b = model.encode(texture_tensor)
+
+        return quant_t, quant_b, id_t, id_b
+    else:
+        quant, diff, id = model.encode(texture_tensor)
+
+        return quant, diff, id
+
+
+ # PLOTTING UTILITIES
+
+def float_to_heatmap_color(value, min, max):
+    # https://stackoverflow.com/questions/20792445/calculate-rgb-value-for-a-range-of-values-to-create-heat-map
+
+    ratio = 2 * (value-min) / (max - min)
+    b = torch.max(torch.zeros_like(value), 1.*(1. - ratio))
+    r = torch.max(torch.zeros_like(value), 1.*(ratio - 1))
+    g = 1 - b - r
+    return torch.cat([r[:, None, :, :], g[:, None, :, :], b[:, None, :, :]], 1)
