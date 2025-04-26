@@ -36,7 +36,7 @@ def perturb_latent(quant, stdev: float):
 
     return perturbed_quant
 
-def read_file_as_tensor(file_path, line_length=16):
+def read_file_as_tensor(file_path, line_length=16, offset=33):
     """
     This function reads a file and returns its content as a pytorch tensor.
     """
@@ -50,7 +50,7 @@ def read_file_as_tensor(file_path, line_length=16):
             row_content = []
             for char_idx in range(line_length):
                 # row idx is added to get rid of the newline characters
-                idx = ord(content[row_idx * line_length + row_idx + char_idx])
+                idx = ord(content[row_idx * line_length + row_idx + char_idx]) - offset
                 row_content.append(idx)
             parsed_content.append(row_content)
 
