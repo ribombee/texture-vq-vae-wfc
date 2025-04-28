@@ -176,14 +176,14 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
 
         print(f"Finished NCA generation for {code_path}")
 
-        # Save comparison images
-        baseline_comparison_image = torch.cat(original_model_generated_images + nca_images + perturbed_images, 0)
-        utils.save_image(baseline_comparison_image, output_folder / "baseline_comparison.png", normalize=True, nrow=5)
+        if normal_successes != 0:
+            # Save comparison images
+            baseline_comparison_image = torch.cat(original_model_generated_images + nca_images + perturbed_images, 0)
+            utils.save_image(baseline_comparison_image, output_folder / "baseline_comparison.png", normalize=True, nrow=5)
 
-        ablation_comparison_image = torch.cat(original_model_generated_images + no_es_generated_images + no_gated_generated_images, 0)
-        utils.save_image(ablation_comparison_image, output_folder / "ablation_comparison.png", normalize=True, nrow=5)
-
-        # Classification evaluation.
+        if normal_successes != 0 and no_es_successes != 0 and no_gated_successes != 0:
+            ablation_comparison_image = torch.cat(original_model_generated_images + no_es_generated_images + no_gated_generated_images, 0)
+            utils.save_image(ablation_comparison_image, output_folder / "ablation_comparison.png", normalize=True, nrow=5)
 
         row_list.append({
             "filename": img_name,
