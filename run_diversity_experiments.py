@@ -74,7 +74,7 @@ def read_txt_and_decode_code(code_path, model):
     decoded_img = model.decode_code(code, None)
     return decoded_img
 
-def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc, output_loc, conf):
+def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc, output_loc, conf, start_idx, end_idx):
 
 
     vqvae_model.eval()
@@ -107,10 +107,11 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
         abl_no_gated_image_loc.mkdir()
 
     all_code_paths = list(data_loc.rglob("*.txt"))
+    this_run_paths = all_code_paths[start_idx:end_idx]
     row_list = []
     clip_metrics = ClipMetrics(n_eigs=3)
 
-    for code_path in tqdm(all_code_paths):
+    for code_path in tqdm(this_run_paths):
         print(f"Processing {code_path}")
         img_name = code_path.stem
         output_folder = output_loc / img_name
@@ -215,13 +216,17 @@ def __parse_args():
     parser.add_argument("no_gated_model_path", type=str, help="Path to the no gated convolutions model")
     parser.add_argument("data_path", type=str, help="Path to the directory containing the codes")
     parser.add_argument("output_path", type=str, help="Path to the output directory")
+    parser.add_argument("idxs_start", type=int, help="Start index for what portion of the test set to run")
+    parser.add_argument("idxs_end", type=int, help="End index for what portion of the test set to run")
     return parser.parse_args()
 
 if __name__ == "__main__":
     torch.set_default_device("cuda")
     args = __parse_args()
+    start_idx = args.idxs_start
+    end_idx = args.idxs_end
     conf = OmegaConf.load("config.yaml")
     vqvae_model = load_model(args.vqvae_model_path, conf)
     no_es_model = load_model(args.no_es_model_path, conf)
     no_gated_model = load_model(args.no_gated_model_path, conf, gated=False)
-    run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, args.data_path, args.output_path, conf)
+    run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, args.data_path, args.output_path, conf, start_idx, end_idx)
