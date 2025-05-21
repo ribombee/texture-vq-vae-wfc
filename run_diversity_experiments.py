@@ -118,8 +118,8 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
         if not output_folder.exists():
             output_folder.mkdir()
 
-        original_img = read_txt_and_decode_code(code_path, vqvae_model)
-        utils.save_image(original_img, output_folder / "original.png", normalize=True)
+        original_img = utils.read_image((code_path.parent / code_path.stem) / f"original.png", mode=utils.ImageReadMode.RGB)
+        # utils.save_image(original_img, output_folder / "original_model_decoded.png", normalize=True)
 
         original_model_generated_images = []
         no_es_generated_images = []
@@ -136,7 +136,7 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
                 normal_successes+= 1
                 generated_img = read_txt_and_decode_code(new_code_path, vqvae_model)
                 original_model_generated_images.append(generated_img)
-                utils.save_image(generated_img, our_image_loc / f"generated_{idx}.png", normalize=True)
+                utils.save_image(generated_img, our_image_loc / f"generated_{code_path}_{idx}.png", normalize=True)
 
             # Ablation model with no early stopping
             new_code_path = (abl_no_es_loc / code_path.stem) / f"new_{idx}.txt.lvl"
@@ -144,7 +144,7 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
                 no_es_successes+= 1
                 generated_img = read_txt_and_decode_code(new_code_path, no_es_model)
                 no_es_generated_images.append(generated_img)
-                utils.save_image(generated_img, abl_no_es_image_loc / f"generated_{idx}.png", normalize=True)
+                utils.save_image(generated_img, abl_no_es_image_loc / f"generated_{code_path}_{idx}.png", normalize=True)
 
             # Ablation model with no gated convolutions
             new_code_path = (abl_no_gated_loc / code_path.stem) / f"new_{idx}.txt.lvl"
@@ -152,12 +152,12 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
                 no_gated_successes+= 1
                 generated_img = read_txt_and_decode_code(new_code_path, no_gated_model)
                 no_gated_generated_images.append(generated_img)
-                utils.save_image(generated_img, abl_no_gated_image_loc / f"generated_{idx}.png", normalize=True)
+                utils.save_image(generated_img, abl_no_gated_image_loc / f"generated_{code_path}_{idx}.png", normalize=True)
 
             # These should not fail, so no need to check for existence
             perturbed_img = read_txt_perturb_and_decode(code_path, vqvae_model)
             perturbed_images.append(perturbed_img)
-            utils.save_image(perturbed_img, perturbed_image_loc / f"perturbed_{idx}.png", normalize=True)
+            utils.save_image(perturbed_img, perturbed_image_loc / f"perturbed_{code_path}_{idx}.png", normalize=True)
 
         print(f"Finished VQVAE generation for {code_path}")
 
@@ -173,7 +173,7 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
             nca_gen_time = time.time() - start_time
             nca_generate_times.append(nca_gen_time)
             nca_images.append(nca_img)
-            utils.save_image(nca_img, nca_image_loc / f"nca_generated_{idx}.png", normalize=True)
+            utils.save_image(nca_img, nca_image_loc / f"nca_generated_{code_path}_{idx}.png", normalize=True)
 
         print(f"Finished NCA generation for {code_path}")
 
@@ -194,7 +194,7 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
             "nca_train_time": nca_train_time,
             "nca_generate_time": np.mean(nca_generate_times),
         })
-
+    """
     our_tce = clip_metrics.tce(str(our_image_loc))
     nca_tce = clip_metrics.tce(str(nca_image_loc))
     perturbed_tce = clip_metrics.tce(str(perturbed_image_loc))
@@ -208,6 +208,7 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
     print(f"No Gated TCE: {no_gated_tce}")
     results_df = pd.DataFrame(row_list)
     results_df.to_csv(output_loc / "diversity_results.csv")
+    """
 
 def __parse_args():
     parser = argparse.ArgumentParser(description="Run diversity experiments")
