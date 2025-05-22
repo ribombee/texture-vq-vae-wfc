@@ -5,7 +5,7 @@ from pathlib import Path
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
-from torchvision import utils
+from torchvision import utils, io
 from model import VQVAE
 from image_diversity import ClipMetrics
 from omegaconf import OmegaConf
@@ -118,7 +118,7 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
         if not output_folder.exists():
             output_folder.mkdir()
 
-        original_img = utils.read_image((code_path.parent / code_path.stem) / f"original.png", mode=utils.ImageReadMode.RGB)
+        original_img = io.read_image((code_path.parent / code_path.stem) / f"original.png", mode=io.ImageReadMode.RGB)
         # utils.save_image(original_img, output_folder / "original_model_decoded.png", normalize=True)
 
         original_model_generated_images = []
