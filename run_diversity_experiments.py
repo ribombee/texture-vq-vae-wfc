@@ -87,6 +87,8 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
 
     data_loc = Path(data_loc)
     output_loc = Path(output_loc)
+    our_image_loc = output_loc / "our_images"
+    perturbed_image_loc = output_loc / "perturbed_images"
     nca_image_loc = output_loc / "nca_images"
     abl_no_es_loc = output_loc / "no_es"
     abl_no_gated_loc = output_loc / "no_gating"
@@ -95,10 +97,8 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
 
     if not nca_image_loc.exists():
         nca_image_loc.mkdir()
-    perturbed_image_loc = output_loc / "perturbed_images"
     if not perturbed_image_loc.exists():
         perturbed_image_loc.mkdir()
-    our_image_loc = output_loc / "our_images"
     if not our_image_loc.exists():
         our_image_loc.mkdir()
     if not abl_no_es_image_loc.exists():
@@ -118,7 +118,7 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
         if not output_folder.exists():
             output_folder.mkdir()
 
-        original_img = io.read_image((code_path.parent / code_path.stem) / f"original.png", mode=io.ImageReadMode.RGB)
+        original_img = io.read_image((data_loc / code_path.stem) / f"original.png", mode=io.ImageReadMode.RGB)
         # utils.save_image(original_img, output_folder / "original_model_decoded.png", normalize=True)
 
         original_model_generated_images = []
