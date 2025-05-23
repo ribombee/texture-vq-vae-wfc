@@ -131,7 +131,7 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
         for idx in range(5):
             # Normal model
 
-            new_code_path = (code_path.parent / code_path.stem) / f"new_{idx}.txt.lvl"
+            new_code_path = (all_code_paths / code_path.stem) / f"new_{idx}.txt.lvl"
             if new_code_path.exists():
                 normal_successes+= 1
                 generated_img = read_txt_and_decode_code(new_code_path, vqvae_model)
