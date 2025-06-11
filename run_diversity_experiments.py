@@ -11,6 +11,7 @@ from image_diversity import ClipMetrics
 from omegaconf import OmegaConf
 import time
 import torchvision.models as models
+from util import float_to_heatmap_color
 
 from nca import *
 
@@ -43,7 +44,7 @@ def read_file_as_tensor(file_path, line_length=16, offset=33):
 
     parsed_content = []
 
-    with open(file_path, "r") as file:
+    with open(file_path, "r", encoding="utf-8") as file:
         content = file.read()
 
         for row_idx in range(line_length):
@@ -66,13 +67,21 @@ def read_txt_perturb_and_decode(code_path, model, std_dev=0.5):
     perturbed_img = model.decode(perturbed_code, None)
     return perturbed_img
 
+
 def read_txt_and_decode_code(code_path, model):
     code = read_file_as_tensor(code_path, 16)
     code = code[None, :, :]
     code = torch.LongTensor(code).cuda()
 
     decoded_img = model.decode_code(code, None)
-    return decoded_img
+    return decoded_img, code
+
+
+def code_to_heatmap(code, min_val=0, max_val=128, size=[3, 128, 128]):
+    heatmap = float_to_heatmap_color(code.float(), min_val, max_val)
+    heatmap = torch.nn.Upsample(size=size, mode="nearest")(heatmap.unsqueeze(0))
+    return heatmap[0]
+
 
 def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc, output_loc, conf, start_idx, end_idx):
 
@@ -90,8 +99,9 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
     our_image_loc = output_loc / "our_images"
     perturbed_image_loc = output_loc / "perturbed_images"
     nca_image_loc = output_loc / "nca_images"
+    regular_loc = output_loc / "regular"
     abl_no_es_loc = output_loc / "no_es"
-    abl_no_gated_loc = output_loc / "no_gating"
+    abl_no_gated_loc = output_loc / "no_gated"
     abl_no_es_image_loc = output_loc / "no_es_images"
     abl_no_gated_image_loc = output_loc / "no_gating_images"
 
@@ -106,10 +116,10 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
     if not abl_no_gated_image_loc.exists():
         abl_no_gated_image_loc.mkdir()
 
-    all_code_paths = list(data_loc.rglob("*.txt"))
+    all_code_paths = list(regular_loc.rglob("*.txt"))
     this_run_paths = all_code_paths[start_idx:end_idx]
     row_list = []
-    clip_metrics = ClipMetrics(n_eigs=3)
+    # clip_metrics = ClipMetrics(n_eigs=3)
 
     for code_path in tqdm(this_run_paths):
         print(f"Processing {code_path}")
@@ -118,12 +128,15 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
         if not output_folder.exists():
             output_folder.mkdir()
 
-        original_img = io.read_image((data_loc / code_path.stem) / f"original.png", mode=io.ImageReadMode.RGB)
+        original_img = io.read_image((data_loc / img_name) / f"original.png", mode=io.ImageReadMode.RGB)
         # utils.save_image(original_img, output_folder / "original_model_decoded.png", normalize=True)
 
         original_model_generated_images = []
+        original_model_heatmaps = []
         no_es_generated_images = []
+        no_es_model_heatmaps = []
         no_gated_generated_images = []
+        no_gated_model_heatmaps = []
         perturbed_images = []
         normal_successes = 0
         no_es_successes = 0
@@ -131,35 +144,51 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
         for idx in range(5):
             # Normal model
 
-            new_code_path = (all_code_paths / code_path.stem) / f"new_{idx}.txt.lvl"
+            new_code_path = (regular_loc / img_name) / f"new_{idx}.txt.lvl"
             if new_code_path.exists():
                 normal_successes+= 1
-                generated_img = read_txt_and_decode_code(new_code_path, vqvae_model)
+                generated_img, code = read_txt_and_decode_code(new_code_path, vqvae_model)
                 original_model_generated_images.append(generated_img)
-                utils.save_image(generated_img, our_image_loc / f"generated_{code_path}_{idx}.png", normalize=True)
+                original_model_heatmaps.append(code_to_heatmap(code, size=generated_img.shape[1:]))
+                utils.save_image(generated_img, our_image_loc / f"generated_{img_name}_{idx}.png", normalize=True)
 
             # Ablation model with no early stopping
-            new_code_path = (abl_no_es_loc / code_path.stem) / f"new_{idx}.txt.lvl"
+            new_code_path = (abl_no_es_loc / img_name) / f"new_{idx}.txt.lvl"
             if new_code_path.exists():
                 no_es_successes+= 1
-                generated_img = read_txt_and_decode_code(new_code_path, no_es_model)
+                generated_img, code = read_txt_and_decode_code(new_code_path, no_es_model)
                 no_es_generated_images.append(generated_img)
-                utils.save_image(generated_img, abl_no_es_image_loc / f"generated_{code_path}_{idx}.png", normalize=True)
+                no_es_model_heatmaps.append(code_to_heatmap(code, size=generated_img.shape[1:]))
+                utils.save_image(generated_img, abl_no_es_image_loc / f"generated_{img_name}_{idx}.png", normalize=True)
 
             # Ablation model with no gated convolutions
-            new_code_path = (abl_no_gated_loc / code_path.stem) / f"new_{idx}.txt.lvl"
+            new_code_path = (abl_no_gated_loc / img_name) / f"new_{idx}.txt.lvl"
             if new_code_path.exists():
                 no_gated_successes+= 1
-                generated_img = read_txt_and_decode_code(new_code_path, no_gated_model)
+                generated_img, code = read_txt_and_decode_code(new_code_path, no_gated_model)
                 no_gated_generated_images.append(generated_img)
-                utils.save_image(generated_img, abl_no_gated_image_loc / f"generated_{code_path}_{idx}.png", normalize=True)
+                no_gated_model_heatmaps.append(code_to_heatmap(code, size=generated_img.shape[1:]))
+                utils.save_image(generated_img, abl_no_gated_image_loc / f"generated_{img_name}_{idx}.png", normalize=True)
 
             # These should not fail, so no need to check for existence
             perturbed_img = read_txt_perturb_and_decode(code_path, vqvae_model)
             perturbed_images.append(perturbed_img)
-            utils.save_image(perturbed_img, perturbed_image_loc / f"perturbed_{code_path}_{idx}.png", normalize=True)
+            utils.save_image(perturbed_img, perturbed_image_loc / f"perturbed_{img_name}_{idx}.png", normalize=True)
 
-        print(f"Finished VQVAE generation for {code_path}")
+        # Make plots with heatmaps also lol
+        if len(original_model_generated_images) > 0:
+            heatmap_combo_img = torch.cat(original_model_generated_images + original_model_heatmaps, 0)
+            utils.save_image(heatmap_combo_img, output_folder / f"original_model_heatmaps_{img_name}.png", normalize=True, nrow=5)
+
+        if len(no_es_generated_images) > 0:
+            heatmap_combo_img = torch.cat(no_es_generated_images + no_es_model_heatmaps, 0)
+            utils.save_image(heatmap_combo_img, output_folder / f"no_es_model_heatmaps_{img_name}.png", normalize=True, nrow=5)
+
+        if len(no_gated_generated_images) > 0:
+            heatmap_combo_img = torch.cat(no_gated_generated_images + no_gated_model_heatmaps, 0)
+            utils.save_image(heatmap_combo_img, output_folder / f"no_gated_model_heatmaps_{img_name}.png", normalize=True, nrow=5)
+
+        print(f"Finished VQVAE generation for {img_name}. Successes were normal: {normal_successes}, no early stopping: {no_es_successes}, no gated convolutions: {no_gated_successes}")
 
         # Train and generate images using NCA model
         start_time = time.time()
@@ -173,14 +202,14 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
             nca_gen_time = time.time() - start_time
             nca_generate_times.append(nca_gen_time)
             nca_images.append(nca_img)
-            utils.save_image(nca_img, nca_image_loc / f"nca_generated_{code_path}_{idx}.png", normalize=True)
+            utils.save_image(nca_img, nca_image_loc / f"nca_generated_{img_name}_{idx}.png", normalize=True)
 
-        print(f"Finished NCA generation for {code_path}")
+        print(f"Finished NCA generation for {img_name}. Num successes: {len(nca_images)}, Train time: {nca_train_time:.2f}s, Generate times: {nca_generate_times}")
 
         if normal_successes != 0:
             # Save comparison images
             baseline_comparison_image = torch.cat(original_model_generated_images + nca_images + perturbed_images, 0)
-            utils.save_image(baseline_comparison_image, output_folder / "baseline_comparison.png", normalize=True, nrow=5)
+            utils.save_image(baseline_comparison_image, output_folder / "baseline_comparison.png", normalize=False, nrow=5)
 
         if normal_successes != 0 and no_es_successes != 0 and no_gated_successes != 0:
             ablation_comparison_image = torch.cat(original_model_generated_images + no_es_generated_images + no_gated_generated_images, 0)

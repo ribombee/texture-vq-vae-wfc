@@ -73,7 +73,7 @@ def ot_loss(source, target, proj_n=32):
   return (source_proj-target_interp).square().sum()
 
 def create_vgg_loss(target_img, vgg16):
-  yy = calc_styles_vgg(target_img, vgg16)
+  yy = calc_styles_vgg(target_img.unsqueeze(0), vgg16)
   def loss_f(imgs):
     xx = calc_styles_vgg(imgs, vgg16)
     return sum(ot_loss(x, y) for x, y in zip(xx, yy))
