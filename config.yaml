@@ -19,5 +19,5 @@ training:
   es_begin: 50
   es_patience: 10
   es_min_delta: 0.0001
-  count_loss_weight: 3
+  count_loss_weight: 0
 
