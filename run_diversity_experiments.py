@@ -192,13 +192,13 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
 
         # Train and generate images using NCA model
         start_time = time.time()
-        nca_model = train_nca_model(original_img.to("cuda"), vgg16)
+        nca_model = train_nca_model(original_img.to("cuda") / 255, vgg16)
         nca_train_time = time.time() - start_time
         nca_images = []
         nca_generate_times = []
         for idx in range(5):
             start_time = time.time()
-            nca_img = nca_model.generate_image(original_img.to("cuda"))
+            nca_img = nca_model.generate_image(original_img.to("cuda") / 255)
             nca_gen_time = time.time() - start_time
             nca_generate_times.append(nca_gen_time)
             nca_images.append(nca_img)
