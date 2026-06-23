@@ -15,9 +15,12 @@ from util import float_to_heatmap_color
 
 from nca import *
 
+if torch.accelerator.is_available():
+    device = torch.device(torch.accelerator.current_accelerator())
+else:
+    device = torch.device("cpu")
 
 def load_model(model_loc, conf, gated=True):
-    device = "cuda"
     model = VQVAE(conf=conf, gated=gated).to(device)
     model.load_state_dict(torch.load(model_loc))
     return model
@@ -83,13 +86,14 @@ def code_to_heatmap(code, min_val=0, max_val=128, size=[3, 128, 128]):
     return heatmap[0]
 
 
-def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc, output_loc, conf, start_idx, end_idx):
+def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, no_ploss_model, data_loc, output_loc, conf, start_idx, end_idx):
 
 
     vqvae_model.eval()
     no_es_model.eval()
     no_gated_model.eval()
-    vgg16 = models.vgg16(weights='IMAGENET1K_V1').features.to("cuda")
+    no_ploss_model.eval()
+    vgg16 = models.vgg16(weights='IMAGENET1K_V1').features.to(device)
     # Not needed for now, itll probably be better to run this in a 4th eval script
     # resnet_50 = models.resnet50(weights='IMAGENET1K_V1').to("cuda")
     # resnet_50.eval() # Used for the classifier evaluation bit.
@@ -104,6 +108,9 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
     abl_no_gated_loc = output_loc / "no_gated"
     abl_no_es_image_loc = output_loc / "no_es_images"
     abl_no_gated_image_loc = output_loc / "no_gating_images"
+    abl_no_ploss_loc = output_loc / "no_ploss"
+    abl_no_ploss_image_loc = output_loc / "no_ploss_images"
+
 
     if not nca_image_loc.exists():
         nca_image_loc.mkdir()
@@ -115,6 +122,8 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
         abl_no_es_image_loc.mkdir()
     if not abl_no_gated_image_loc.exists():
         abl_no_gated_image_loc.mkdir()
+    if not abl_no_ploss_image_loc.exists():
+        abl_no_ploss_image_loc.mkdir()
 
     all_code_paths = list(regular_loc.rglob("*.txt"))
     this_run_paths = all_code_paths[start_idx:end_idx]
@@ -137,6 +146,8 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
         no_es_model_heatmaps = []
         no_gated_generated_images = []
         no_gated_model_heatmaps = []
+        no_ploss_generated_images = []
+        no_ploss_model_heatmaps = []
         perturbed_images = []
         normal_successes = 0
         no_es_successes = 0
@@ -170,6 +181,15 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
                 no_gated_model_heatmaps.append(code_to_heatmap(code, size=generated_img.shape[1:]))
                 utils.save_image(generated_img, abl_no_gated_image_loc / f"generated_{img_name}_{idx}.png", normalize=True)
 
+            # Ablation model with no palette loss (ploss)
+            new_code_path = (abl_no_ploss_loc / img_name) / f"new_{idx}.txt.lvl"
+            if new_code_path.exists():
+                no_gated_successes+= 1
+                generated_img, code = read_txt_and_decode_code(new_code_path, no_ploss_model)
+                no_gated_generated_images.append(generated_img)
+                no_gated_model_heatmaps.append(code_to_heatmap(code, size=generated_img.shape[1:]))
+                utils.save_image(generated_img, abl_no_ploss_image_loc / f"generated_{img_name}_{idx}.png", normalize=True)
+
             # These should not fail, so no need to check for existence
             perturbed_img = read_txt_perturb_and_decode(code_path, vqvae_model)
             perturbed_images.append(perturbed_img)
@@ -192,13 +212,13 @@ def run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, data_loc
 
         # Train and generate images using NCA model
         start_time = time.time()
-        nca_model = train_nca_model(original_img.to("cuda") / 255, vgg16)
+        nca_model = train_nca_model(original_img.to(device) / 255, vgg16)
         nca_train_time = time.time() - start_time
         nca_images = []
         nca_generate_times = []
         for idx in range(5):
             start_time = time.time()
-            nca_img = nca_model.generate_image(original_img.to("cuda") / 255)
+            nca_img = nca_model.generate_image(original_img.to(device) / 255)
             nca_gen_time = time.time() - start_time
             nca_generate_times.append(nca_gen_time)
             nca_images.append(nca_img)
@@ -244,6 +264,7 @@ def __parse_args():
     parser.add_argument("vqvae_model_path", type=str, help="Path to the VQ-VAE model")
     parser.add_argument("no_es_model_path", type=str, help="Path to the no early stopping model")
     parser.add_argument("no_gated_model_path", type=str, help="Path to the no gated convolutions model")
+    parser.add_argument("no_ploss_model_path", type=str, help="Path to the no palette loss model")
     parser.add_argument("data_path", type=str, help="Path to the directory containing the codes")
     parser.add_argument("output_path", type=str, help="Path to the output directory")
     parser.add_argument("idxs_start", type=int, help="Start index for what portion of the test set to run")
@@ -251,7 +272,7 @@ def __parse_args():
     return parser.parse_args()
 
 if __name__ == "__main__":
-    torch.set_default_device("cuda")
+    torch.set_default_device(device)
     args = __parse_args()
     start_idx = args.idxs_start
     end_idx = args.idxs_end
@@ -259,4 +280,5 @@ if __name__ == "__main__":
     vqvae_model = load_model(args.vqvae_model_path, conf)
     no_es_model = load_model(args.no_es_model_path, conf)
     no_gated_model = load_model(args.no_gated_model_path, conf, gated=False)
-    run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, args.data_path, args.output_path, conf, start_idx, end_idx)
+    no_ploss_model = load_model(args.no_ploss_model_path, conf)
+    run_diversity_experiments(vqvae_model, no_es_model, no_gated_model, no_ploss_model, args.data_path, args.output_path, conf, start_idx, end_idx)

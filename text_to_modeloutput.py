@@ -6,6 +6,10 @@ import torch
 from util import get_texture_codes, float_to_heatmap_color
 import torchvision
 
+if torch.accelerator.is_available():
+    device = torch.device(torch.accelerator.current_accelerator())
+else:
+    device = torch.device("cpu")
 
 def read_file_as_tensor(file_path, line_length=16):
     """
@@ -28,7 +32,6 @@ def read_file_as_tensor(file_path, line_length=16):
     return torch.LongTensor(parsed_content)
 
 def load_vqvae(model_loc, conf):
-    device = "cuda"
     model = VQVAE(conf=conf).to(device)
     model.load_state_dict(torch.load(model_loc))
     model.eval()
@@ -39,7 +42,7 @@ def text_to_modeloutput(text, model):
     This function takes a text and returns a model output.
     """
 
-    texture = model.read_txt_and_decode_code(text.to('cuda'), None)
+    texture = model.read_txt_and_decode_code(text.to(device, None))
     return texture
 
 
@@ -84,5 +87,5 @@ if __name__ == "__main__":
             new_code_heatmap = float_to_heatmap_color(code, 0, conf.model.codebook_size)
             new_code_heatmap = torch.nn.Upsample(size=[128, 128], mode="nearest")(new_code_heatmap.float())
 
-            torchvision.utils.save_image(torch.cat([model_output, new_code_heatmap.to("cuda")], 0), subfolder / f"{code_file.stem}_output.png", normalize=True)
+            torchvision.utils.save_image(torch.cat([model_output, new_code_heatmap.to(device)], 0), subfolder / f"{code_file.stem}_output.png", normalize=True)
             torchvision.utils.save_image(model_output, subfolder / f"{code_file.stem}_output_only.png", normalize=True)

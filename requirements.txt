@@ -11,15 +11,15 @@ image-diversity
 pathlib
 datetime
 
-pillow==9.5.0
+pillow
 numpy
 omegaconf==2.3.0
 torchinfo==1.8.0
 tqdm==4.65.0
-pandas==1.5.3
+pandas
 lpips==0.1.4
 torcheval==0.0.6
-torchmetrics==0.11.4
+torchmetrics
 image-diversity
 pathlib==1.0.1
 datetime==5.1

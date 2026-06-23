@@ -7,7 +7,9 @@ import torchvision.datasets
 from torch.distributions import register_kl
 from torchvision import transforms, datasets, utils
 import pandas as pd
-from torcheval.metrics.functional import peak_signal_noise_ratio
+# from torcheval.metrics.functional import peak_signal_to_noise_ratio
+from torchmetrics.functional.image import peak_signal_noise_ratio
+from torchmetrics.functional.image import learned_perceptual_image_patch_similarity
 from torchmetrics import StructuralSimilarityIndexMeasure
 from util import get_texture_codes, float_to_heatmap_color
 from pathlib import Path
@@ -18,6 +20,12 @@ from model import VQVAE
 from datetime import datetime
 import lpips
 from text_to_modeloutput import read_file_as_tensor, text_to_modeloutput
+
+
+if torch.accelerator.is_available():
+    device = torch.device(torch.accelerator.current_accelerator())
+else:
+    device = torch.device("cpu")
 
 def get_test_data(data_loc):
 
@@ -84,10 +92,10 @@ def run_experiments(reg_model, no_es_model, no_gated_model, no_ploss_model, data
     no_gated_model.eval()
     no_ploss_model.eval()
     # Send models to cuda
-    reg_model = reg_model.to("cuda")
-    no_es_model = no_es_model.to("cuda")
-    no_gated_model = no_gated_model.to("cuda")
-    no_ploss_model = no_ploss_model.to("cuda")
+    reg_model = reg_model.to(device)
+    no_es_model = no_es_model.to(device)
+    no_gated_model = no_gated_model.to(device)
+    no_ploss_model = no_ploss_model.to(device)
     test_data = get_test_data(data_loc)
     row_list = []
     # lpips = get_lpips_metric()
@@ -97,6 +105,7 @@ def run_experiments(reg_model, no_es_model, no_gated_model, no_ploss_model, data
     no_es_output_loc = output_loc / "no_es"
     no_gated_output_loc = output_loc / "no_gated"
     no_ploss_output_loc = output_loc / "no_ploss"
+
     reg_output_loc.mkdir()
     no_es_output_loc.mkdir()
     no_gated_output_loc.mkdir()
@@ -108,11 +117,16 @@ def run_experiments(reg_model, no_es_model, no_gated_model, no_ploss_model, data
             "filename": None,
             "reg_psnr": None,
             "reg_ssim": None,
+            "reg_lpips": None,
             "abl_no_es_psnr": None,
             "abl_no_es_ssim": None,
+            "abl_no_es_lpips": None,
             "abl_no_gating_psnr": None,
             "abl_no_gating_ssim": None,
+            "abl_no_gating_lpips": None,
             "abl_no_ploss_psnr": None,
+            "abl_no_ploss_ssim": None,
+            "abl_no_ploss_lpips": None,
         }
         test_datapoint = test_datapoint[0]
         datapoint_dict["filename"] = ''.join(random.choice(string.ascii_lowercase) for i in range(16))
@@ -135,20 +149,20 @@ def run_experiments(reg_model, no_es_model, no_gated_model, no_ploss_model, data
             no_ploss_output_folder.mkdir()
 
         with torch.no_grad():
-            test_datapoint = test_datapoint.to("cuda")
+            test_datapoint = test_datapoint.to(device)
             test_datapoint = test_datapoint[None, :, :, :]
             reg_model_out, reg_diff, reg_model_ids = reg_model(test_datapoint)
             no_es_model_out, no_es_diff, no_es_model_ids = no_es_model(test_datapoint)
             no_gated_model_out, no_gated_diff, no_gated_model_ids = no_gated_model(test_datapoint)
             no_ploss_model_out, no_ploss_diff, no_ploss_model_ids = abl_no_ploss_model(test_datapoint)
 
-        reg_point_psnr = peak_signal_noise_ratio(reg_model_out, test_datapoint, 2.0)
+        reg_point_psnr = peak_signal_noise_ratio(reg_model_out, test_datapoint, 1.0)
         reg_point_ssim = ssim(test_datapoint.to("cpu"), reg_model_out.to("cpu"))
-        no_es_point_psnr = peak_signal_noise_ratio(no_es_model_out, test_datapoint, 2.0)
+        no_es_point_psnr = peak_signal_noise_ratio(no_es_model_out, test_datapoint, 1.0)
         no_es_point_ssim = ssim(test_datapoint.to("cpu"), no_es_model_out.to("cpu"))
-        no_gated_point_psnr = peak_signal_noise_ratio(no_gated_model_out, test_datapoint, 2.0)
+        no_gated_point_psnr = peak_signal_noise_ratio(no_gated_model_out, test_datapoint, 1.0)
         no_gated_point_ssim = ssim(test_datapoint.to("cpu"), no_gated_model_out.to("cpu"))
-        no_ploss_point_psnr = peak_signal_noise_ratio(no_ploss_model_out, test_datapoint, 2.0)
+        no_ploss_point_psnr = peak_signal_noise_ratio(no_ploss_model_out, test_datapoint, 1.0)
         no_ploss_point_ssim = ssim(test_datapoint.to("cpu"), no_ploss_model_out.to("cpu"))
 
         datapoint_dict["reg_psnr"] = reg_point_psnr.item()
@@ -159,6 +173,18 @@ def run_experiments(reg_model, no_es_model, no_gated_model, no_ploss_model, data
         datapoint_dict["abl_no_gating_ssim"] = no_gated_point_ssim.item()
         datapoint_dict["abl_no_ploss_psnr"] = no_ploss_point_psnr.item()
         datapoint_dict["abl_no_ploss_ssim"] = no_ploss_point_ssim.item()
+
+        # calculate lpips
+
+        reg_lpips = learned_perceptual_image_patch_similarity(test_datapoint.to("cpu"), reg_model_out.to("cpu"), net_type="alex")
+        no_es_lpips = learned_perceptual_image_patch_similarity(test_datapoint.to("cpu"), no_es_model_out.to("cpu"), net_type="alex")
+        no_gating_lpips = learned_perceptual_image_patch_similarity(test_datapoint.to("cpu"), no_gated_model_out.to("cpu"), net_type="alex")
+        no_ploss_lpips = learned_perceptual_image_patch_similarity(test_datapoint.to("cpu"), no_ploss_model_out.to("cpu"), net_type="alex")
+
+        datapoint_dict["reg_lpips"] = reg_lpips.item()
+        datapoint_dict["abl_no_es_lpips"] = no_es_lpips.item()
+        datapoint_dict["abl_no_gating_lpips"] = no_gating_lpips.item()
+        datapoint_dict["abl_ploss_lpips"] = no_ploss_lpips.item()
 
         utils.save_image(test_datapoint, output_folder / "original.png", normalize=True)
         utils.save_image(reg_model_out, output_folder / "reg_model_output.png", normalize=True)
@@ -198,7 +224,6 @@ def run_experiments(reg_model, no_es_model, no_gated_model, no_ploss_model, data
 
 
 def load_model(model_loc, conf, gated=True):
-    device = "cuda"
     model = VQVAE(conf=conf, gated=gated).to(device)
     model.load_state_dict(torch.load(model_loc), strict=False)
     return model
